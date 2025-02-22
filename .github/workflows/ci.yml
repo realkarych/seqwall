@@ -13,7 +13,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -23,8 +24,10 @@ jobs:
       - name: Download Dependencies
         run: go mod download
 
-      - name: Build
+      - name: Build the binary
+        shell: bash
         run: make build ls
 
       - name: Run Tests
+        shell: bash
         run: make test
