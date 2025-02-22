@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
-APP_NAME := seqwall         # Name of the binary
-DIST_DIR := dist            # Build destination directory
+APP_NAME := seqwall
+DIST_DIR := dist
 
 .PHONY: all build ls test lint coverage clean help
 
