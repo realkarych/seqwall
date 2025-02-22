@@ -6,7 +6,7 @@ DIST_DIR := dist
 .PHONY: all build ls test lint coverage clean help
 
 ## Default target
-all: build
+all: help
 
 ## Build the binary
 build:
