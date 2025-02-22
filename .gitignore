@@ -24,3 +24,5 @@ go.work.sum
 
 *.log
 tmp/
+
+*.DS_Store
