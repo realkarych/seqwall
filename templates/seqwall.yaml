@@ -1,0 +1,9 @@
+default:
+  database: postgres
+  migrations_dir: path/to/migrations
+  migrate_up: make up
+  migrate_down: make down
+  test_depth: 3  # For staircase testing.
+  env:
+    path: path/to/.env
+    db_url: POSTGRES_URL  # The name of the environment variable that contains the database URL.
