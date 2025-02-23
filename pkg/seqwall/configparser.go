@@ -15,7 +15,7 @@ const (
 
 type EnvConfig struct {
 	Path  string `yaml:"path"`
-	DBURL string `yaml:"db_url"`
+	DbUrl string `yaml:"db_url"`
 }
 
 type SeqwallConfig struct {
@@ -31,13 +31,13 @@ type ConfigParser interface {
 	Parse(r io.Reader) (map[string]SeqwallConfig, error)
 }
 
-type YAMLParser struct{}
+type YamlParser struct{}
 
-func NewYAMLParser() ConfigParser {
-	return &YAMLParser{}
+func NewYamlParser() ConfigParser {
+	return &YamlParser{}
 }
 
-func (p *YAMLParser) Parse(r io.Reader) (map[string]SeqwallConfig, error) {
+func (p *YamlParser) Parse(r io.Reader) (map[string]SeqwallConfig, error) {
 	var cfg map[string]SeqwallConfig
 	decoder := yaml.NewDecoder(r)
 	if err := decoder.Decode(&cfg); err != nil {

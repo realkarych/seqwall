@@ -27,7 +27,7 @@ staging:
     path: path/to/.env
     db_url: POSTGRES_URL
 `
-	parser := NewYAMLParser()
+	parser := NewYamlParser()
 	cfg, err := parser.Parse(strings.NewReader(validYAML))
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -41,7 +41,7 @@ staging:
 		TestDepth:     3,
 		Env: EnvConfig{
 			Path:  "path/to/.env",
-			DBURL: "POSTGRES_URL",
+			DbUrl: "POSTGRES_URL",
 		},
 	}
 
@@ -73,7 +73,7 @@ default:
     path: path/to/.env
     db_url: POSTGRES_URL
 `
-	parser := NewYAMLParser()
+	parser := NewYamlParser()
 	_, err := parser.Parse(strings.NewReader(invalidYAML))
 	if err == nil {
 		t.Fatal("expected error due to invalid database, got none")
@@ -87,7 +87,7 @@ default:
 
 func TestInvalidYAML(t *testing.T) {
 	invalidYAML := "this is not yaml"
-	parser := NewYAMLParser()
+	parser := NewYamlParser()
 	_, err := parser.Parse(strings.NewReader(invalidYAML))
 	if err == nil {
 		t.Fatal("expected error for invalid YAML, got none")
