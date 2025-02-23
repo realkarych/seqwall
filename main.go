@@ -11,8 +11,8 @@ import (
 func main() {
 	config, err := parseConfig()
 	if err != nil {
-		fmt.Printf("%v\n", err)
-		return
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 	fmt.Printf("Starts with config: %+v\n", config)
 }
