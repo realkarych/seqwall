@@ -25,6 +25,7 @@ type SeqwallConfig struct {
 	MigrateDown   string    `yaml:"migrate_down"`
 	TestDepth     int       `yaml:"test_depth"`
 	Env           EnvConfig `yaml:"env"`
+	MigrationName string
 }
 
 type ConfigParser interface {
