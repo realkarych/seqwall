@@ -30,7 +30,7 @@ default:
 	tmpfile.Close()
 
 	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
-	os.Args = []string{"cmd", "--config", tmpfile.Name(), "--env", "default"}
+	os.Args = []string{"cmd", "--config", tmpfile.Name(), "--env", "default", "--migration", "20210101000000.sql"}
 
 	config, err := parseConfig()
 	if err != nil {
@@ -93,7 +93,7 @@ custom:
 	tmpfile.Close()
 
 	flag.CommandLine = flag.NewFlagSet("test", flag.ContinueOnError)
-	os.Args = []string{"cmd", "--config", tmpfile.Name(), "--env", "custom"}
+	os.Args = []string{"cmd", "--config", tmpfile.Name(), "--env", "custom", "--migration", "20210101000000.sql"}
 
 	config, err := parseConfig()
 	if err != nil {
