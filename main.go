@@ -8,6 +8,12 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	ExitOk           = 0
+	ExitRuntimeError = 1
+	ExitSomeWarning  = 2
+)
+
 var (
 	migrationsPath string
 	testSchema     bool
@@ -33,7 +39,7 @@ var staircaseCmd = &cobra.Command{
 		}
 		if postgresUrl == "" {
 			fmt.Fprintln(os.Stderr, "Error: postgres-url flag not provided and POSTGRES_URL environment variable is not set")
-			os.Exit(1)
+			os.Exit(ExitRuntimeError)
 		}
 	},
 	Run: func(cmd *cobra.Command, args []string) {
@@ -60,6 +66,7 @@ func init() {
 func main() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
-		os.Exit(1)
+		os.Exit(ExitRuntimeError)
 	}
+	os.Exit(ExitOk)
 }
