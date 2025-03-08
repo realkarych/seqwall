@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"os"
 
 	"github.com/realkarych/seqwall/pkg/seqwall"
@@ -38,7 +38,7 @@ var staircaseCmd = &cobra.Command{
 			postgresUrl = os.Getenv("POSTGRES_URL")
 		}
 		if postgresUrl == "" {
-			fmt.Fprintln(os.Stderr, "Error: postgres-url flag not provided and POSTGRES_URL environment variable is not set")
+			log.Fatalf("Error: postgres-url flag not provided and POSTGRES_URL environment variable is not set")
 			os.Exit(ExitRuntimeError)
 		}
 	},
@@ -66,14 +66,13 @@ func init() {
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("Saved from panic:", r)
-			os.Exit(ExitRuntimeError)
+			log.Fatalf("Saved from panic: %v", r)
 		}
 	}()
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Println(err)
-		os.Exit(ExitRuntimeError)
+		log.Fatalf("Command execution failed: %v", err)
 	}
+	log.Println("Execution completed successfully.")
 	os.Exit(ExitOk)
 }
