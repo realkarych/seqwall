@@ -43,6 +43,9 @@ func (s *StaircaseCli) Run() {
 	if err != nil {
 		log.Fatalf("Failed to load migrations: %v", err)
 	}
+	if len(migrations) == 0 {
+		log.Fatalf("No migrations found in %s", s.migrationsPath)
+	}
 
 	log.Printf("Successfully recognized %d migrations!", len(migrations))
 	log.Println("Processing staircase...")
