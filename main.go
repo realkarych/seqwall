@@ -64,6 +64,13 @@ func init() {
 }
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("Saved from panic:", r)
+			os.Exit(ExitRuntimeError)
+		}
+	}()
+
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(ExitRuntimeError)
