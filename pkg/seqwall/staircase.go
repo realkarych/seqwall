@@ -1,24 +1,31 @@
 package seqwall
 
-import "fmt"
-
 type StaircaseCli struct {
-	migrations string
-	testSchema bool
-	depth      int
+	migrations  string
+	testSchema  bool
+	depth       int
+	migrateUp   string
+	migrateDown string
+	postgresUrl string
 }
 
-func NewStaircaseCli(migrations string, testSchema bool, depth int) *StaircaseCli {
+func NewStaircaseCli(
+	migrations string,
+	testSchema bool,
+	depth int,
+	migrateUp string,
+	migrateDown string,
+	postgresUrl string,
+) *StaircaseCli {
 	return &StaircaseCli{
-		migrations: migrations,
-		testSchema: testSchema,
-		depth:      depth,
+		migrations:  migrations,
+		testSchema:  testSchema,
+		depth:       depth,
+		migrateUp:   migrateUp,
+		migrateDown: migrateDown,
+		postgresUrl: postgresUrl,
 	}
 }
 
 func (s *StaircaseCli) Run() {
-	fmt.Println("Running StaircaseCli with the following parameters:")
-	fmt.Printf("Path to migrations: %s\n", s.migrations)
-	fmt.Printf("Check schema: %v\n", s.testSchema)
-	fmt.Printf("Stair depth: %d\n", s.depth)
 }
