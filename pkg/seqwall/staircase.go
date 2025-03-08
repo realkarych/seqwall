@@ -1,5 +1,7 @@
 package seqwall
 
+import "github.com/realkarych/seqwall/pkg/driver"
+
 type StaircaseCli struct {
 	migrations  string
 	testSchema  bool
@@ -28,4 +30,9 @@ func NewStaircaseCli(
 }
 
 func (s *StaircaseCli) Run() {
+	client, err := driver.NewPostgresClient(s.postgresUrl)
+	if err != nil {
+		panic(err)
+	}
+	defer client.Close()
 }
