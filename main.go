@@ -11,7 +11,6 @@ import (
 const (
 	ExitOk           = 0
 	ExitRuntimeError = 1
-	ExitSomeWarning  = 2
 )
 
 var (
