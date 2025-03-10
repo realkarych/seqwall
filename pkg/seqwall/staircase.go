@@ -164,6 +164,7 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		Indexes:     make(map[string]driver.IndexDefinition),
 		Constraints: make(map[string]driver.ConstraintDefinition),
 		EnumTypes:   make(map[string]driver.EnumDefinition),
+		ForeignKeys: make(map[string]driver.ForeignKeyDefinition),
 	}
 
 	columnsQuery := `
@@ -283,6 +284,47 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		}
 		enumDef.Labels = append(enumDef.Labels, enumLabel)
 		snapshot.EnumTypes[typeName] = enumDef
+	}
+
+	foreignKeysQuery := `
+        SELECT
+            tc.constraint_name,
+            tc.table_name,
+            kcu.column_name,
+            ccu.table_name AS foreign_table_name,
+            ccu.column_name AS foreign_column_name,
+            rc.update_rule,
+            rc.delete_rule
+        FROM
+            information_schema.table_constraints AS tc
+        JOIN information_schema.key_column_usage AS kcu
+            ON tc.constraint_name = kcu.constraint_name
+        JOIN information_schema.referential_constraints AS rc
+            ON tc.constraint_name = rc.constraint_name
+        JOIN information_schema.constraint_column_usage AS ccu
+            ON ccu.constraint_name = tc.constraint_name
+        WHERE tc.constraint_type = 'FOREIGN KEY'
+        AND tc.table_schema = 'public';
+    `
+	foreignRows, err := s.dbClient.Execute(foreignKeysQuery)
+	if err != nil {
+		log.Fatalf("error querying foreign keys: %v", err)
+	}
+	defer foreignRows.Rows.Close()
+	for foreignRows.Rows.Next() {
+		var constraintName, tableName, columnName, foreignTableName, foreignColumnName, updateRule, deleteRule string
+		if err := foreignRows.Rows.Scan(&constraintName, &tableName, &columnName, &foreignTableName, &foreignColumnName, &updateRule, &deleteRule); err != nil {
+			log.Fatalf("error scanning foreign key row: %v", err)
+		}
+		snapshot.ForeignKeys[constraintName] = driver.ForeignKeyDefinition{
+			ConstraintName:    constraintName,
+			TableName:         tableName,
+			ColumnName:        columnName,
+			ForeignTableName:  foreignTableName,
+			ForeignColumnName: foreignColumnName,
+			UpdateRule:        updateRule,
+			DeleteRule:        deleteRule,
+		}
 	}
 	return snapshot, nil
 }

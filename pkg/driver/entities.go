@@ -44,10 +44,21 @@ type EnumDefinition struct {
 	Labels []string
 }
 
+type ForeignKeyDefinition struct {
+	ConstraintName    string
+	TableName         string
+	ColumnName        string
+	ForeignTableName  string
+	ForeignColumnName string
+	UpdateRule        string
+	DeleteRule        string
+}
+
 type SchemaSnapshot struct {
 	Tables      map[string]TableDefinition
 	Views       map[string]ViewDefinition
 	Indexes     map[string]IndexDefinition
 	Constraints map[string]ConstraintDefinition
 	EnumTypes   map[string]EnumDefinition
+	ForeignKeys map[string]ForeignKeyDefinition
 }
