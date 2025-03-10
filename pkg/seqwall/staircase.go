@@ -1,8 +1,10 @@
 package seqwall
 
 import (
+	"database/sql"
 	"log"
 	"os/exec"
+	"reflect"
 
 	"github.com/realkarych/seqwall/pkg/driver"
 )
@@ -14,6 +16,7 @@ type StaircaseCli struct {
 	migrateUp      string
 	migrateDown    string
 	postgresUrl    string
+	dbClient       *driver.PostgresClient
 }
 
 func NewStaircaseCli(
@@ -39,7 +42,8 @@ func (s *StaircaseCli) Run() {
 	if err != nil {
 		log.Fatalf("Failed to connect to Postgres: %v", err)
 	}
-	defer client.Close()
+	s.dbClient = client
+	defer s.dbClient.Close()
 
 	migrations, err := loadMigrations(s.migrationsPath)
 	if err != nil {
@@ -80,9 +84,18 @@ func (s *StaircaseCli) processDownUpDown(migrations []string) {
 
 	for i := 1; i <= steps; i++ {
 		migration := migrations[len(migrations)-i]
+		var snapBefore, snapAfter *driver.SchemaSnapshot
+		if s.testSchema {
+			snapBefore, _ = s.makeSchemaSnapshot()
+		}
 		s.makeDownStep(migration, i)
 		s.makeUpStep(migration, i)
 		s.makeDownStep(migration, i)
+		if s.testSchema {
+			snapAfter, _ = s.makeSchemaSnapshot()
+			s.compareSchemas(snapBefore, snapAfter)
+			log.Printf("schema snapshots are equal for migration %s at step %d", migration, i)
+		}
 	}
 
 	log.Println("Staircase test (down-up-down) completed successfully!")
@@ -95,9 +108,18 @@ func (s *StaircaseCli) processUpDownUp(migrations []string) {
 
 	for i := 1; i <= steps; i++ {
 		migration := migrations[i-1]
+		var snapBefore, snapAfter *driver.SchemaSnapshot
+		if s.testSchema {
+			snapBefore, _ = s.makeSchemaSnapshot()
+		}
 		s.makeUpStep(migration, i)
 		s.makeDownStep(migration, i)
 		s.makeUpStep(migration, i)
+		if s.testSchema {
+			snapAfter, _ = s.makeSchemaSnapshot()
+			s.compareSchemas(snapBefore, snapAfter)
+			log.Printf("schema snapshots are equal for migration %s at step %d", migration, i)
+		}
 	}
 
 	log.Println("Staircase test (up-down-up) completed successfully!")
@@ -133,4 +155,140 @@ func (s *StaircaseCli) calculateStairDepth(migrations []string) int {
 		steps = s.depth
 	}
 	return steps
+}
+
+func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
+	snapshot := &driver.SchemaSnapshot{
+		Tables:      make(map[string]driver.TableDefinition),
+		Views:       make(map[string]driver.ViewDefinition),
+		Indexes:     make(map[string]driver.IndexDefinition),
+		Constraints: make(map[string]driver.ConstraintDefinition),
+		EnumTypes:   make(map[string]driver.EnumDefinition),
+	}
+
+	columnsQuery := `
+        SELECT table_name, column_name, data_type, is_nullable, column_default, character_maximum_length, numeric_precision, numeric_scale
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+        ORDER BY table_name, ordinal_position;
+    `
+	colRows, err := s.dbClient.Execute(columnsQuery)
+	if err != nil {
+		log.Fatalf("error querying columns: %v", err)
+	}
+	defer colRows.Rows.Close()
+	for colRows.Rows.Next() {
+		var tableName, columnName, dataType, isNullable string
+		var columnDefault sql.NullString
+		var charMaxLen, numPrecision, numScale sql.NullInt64
+		if err := colRows.Rows.Scan(&tableName, &columnName, &dataType, &isNullable, &columnDefault, &charMaxLen, &numPrecision, &numScale); err != nil {
+			log.Fatalf("error scanning column row: %v", err)
+		}
+		colDef := driver.ColumnDefinition{
+			ColumnName:             columnName,
+			DataType:               dataType,
+			IsNullable:             isNullable,
+			ColumnDefault:          columnDefault,
+			CharacterMaximumLength: charMaxLen,
+			NumericPrecision:       numPrecision,
+			NumericScale:           numScale,
+		}
+		tableDef, exists := snapshot.Tables[tableName]
+		if !exists {
+			tableDef = driver.TableDefinition{}
+		}
+		tableDef.Columns = append(tableDef.Columns, colDef)
+		snapshot.Tables[tableName] = tableDef
+	}
+
+	viewsQuery := `
+        SELECT table_name, view_definition
+        FROM information_schema.views
+        WHERE table_schema = 'public';
+    `
+	viewRows, err := s.dbClient.Execute(viewsQuery)
+	if err != nil {
+		log.Fatalf("error querying views: %v", err)
+	}
+	defer viewRows.Rows.Close()
+	for viewRows.Rows.Next() {
+		var viewName, viewDefinition string
+		if err := viewRows.Rows.Scan(&viewName, &viewDefinition); err != nil {
+			log.Fatalf("error scanning view row: %v", err)
+		}
+		snapshot.Views[viewName] = driver.ViewDefinition{Definition: viewDefinition}
+	}
+
+	indexesQuery := `
+        SELECT indexname, indexdef
+        FROM pg_indexes
+        WHERE schemaname = 'public';
+    `
+	indexRows, err := s.dbClient.Execute(indexesQuery)
+	if err != nil {
+		log.Fatalf("error querying indexes: %v", err)
+	}
+	defer indexRows.Rows.Close()
+	for indexRows.Rows.Next() {
+		var indexName, indexDef string
+		if err := indexRows.Rows.Scan(&indexName, &indexDef); err != nil {
+			log.Fatalf("error scanning index row: %v", err)
+		}
+		snapshot.Indexes[indexName] = driver.IndexDefinition{IndexDef: indexDef}
+	}
+
+	constraintsQuery := `
+        SELECT tc.constraint_name, tc.table_name, tc.constraint_type, cc.check_clause
+        FROM information_schema.table_constraints tc
+        LEFT JOIN information_schema.check_constraints cc ON tc.constraint_name = cc.constraint_name
+        WHERE tc.table_schema = 'public';
+    `
+	constrRows, err := s.dbClient.Execute(constraintsQuery)
+	if err != nil {
+		log.Fatalf("error querying constraints: %v", err)
+	}
+	defer constrRows.Rows.Close()
+	for constrRows.Rows.Next() {
+		var constraintName, tableName, constraintType string
+		var checkClause sql.NullString
+		if err := constrRows.Rows.Scan(&constraintName, &tableName, &constraintType, &checkClause); err != nil {
+			log.Fatalf("error scanning constraint row: %v", err)
+		}
+		snapshot.Constraints[constraintName] = driver.ConstraintDefinition{
+			TableName:      tableName,
+			ConstraintType: constraintType,
+			Definition:     checkClause,
+		}
+	}
+
+	enumQuery := `
+        SELECT t.typname, e.enumlabel
+        FROM pg_type t
+        JOIN pg_enum e ON t.oid = e.enumtypid
+        ORDER BY t.typname, e.enumsortorder;
+    `
+	enumRows, err := s.dbClient.Execute(enumQuery)
+	if err != nil {
+		log.Fatalf("error querying enum types: %v", err)
+	}
+	defer enumRows.Rows.Close()
+	for enumRows.Rows.Next() {
+		var typeName, enumLabel string
+		if err := enumRows.Rows.Scan(&typeName, &enumLabel); err != nil {
+			log.Fatalf("error scanning enum row: %v", err)
+		}
+		enumDef, exists := snapshot.EnumTypes[typeName]
+		if !exists {
+			enumDef = driver.EnumDefinition{}
+		}
+		enumDef.Labels = append(enumDef.Labels, enumLabel)
+		snapshot.EnumTypes[typeName] = enumDef
+	}
+	return snapshot, nil
+}
+
+func (s *StaircaseCli) compareSchemas(snapBefore, snapAfter *driver.SchemaSnapshot) {
+	if !reflect.DeepEqual(snapBefore, snapAfter) {
+		log.Fatalf("schema snapshots differ:\nBefore: %+v\nAfter: %+v", snapBefore, snapAfter)
+	}
 }
