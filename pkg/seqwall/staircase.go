@@ -2,10 +2,11 @@ package seqwall
 
 import (
 	"database/sql"
+	"encoding/json"
 	"log"
 	"os/exec"
-	"reflect"
 
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/realkarych/seqwall/pkg/driver"
 )
 
@@ -417,7 +418,26 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 }
 
 func (s *StaircaseCli) compareSchemas(snapBefore, snapAfter *driver.SchemaSnapshot) {
-	if !reflect.DeepEqual(snapBefore, snapAfter) {
-		log.Fatalf("schema snapshots differ:\nBefore: %+v\nAfter: %+v", snapBefore, snapAfter)
+	beforeJson, err := json.MarshalIndent(snapBefore, "", "  ")
+	if err != nil {
+		log.Fatalf("Error marshalling snapshot before: %v", err)
+	}
+	afterJson, err := json.MarshalIndent(snapAfter, "", "  ")
+	if err != nil {
+		log.Fatalf("Error marshalling snapshot after: %v", err)
+	}
+	diff := difflib.UnifiedDiff{
+		A:        difflib.SplitLines(string(beforeJson)),
+		B:        difflib.SplitLines(string(afterJson)),
+		FromFile: "Snapshot Before",
+		ToFile:   "Snapshot After",
+		Context:  3,
+	}
+	diffText, err := difflib.GetUnifiedDiffString(diff)
+	if err != nil {
+		log.Fatalf("Error generating diff: %v", err)
+	}
+	if diffText != "" {
+		log.Fatalf("Schema snapshots differ:\n%s", diffText)
 	}
 }
