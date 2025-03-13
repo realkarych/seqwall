@@ -54,6 +54,21 @@ type ForeignKeyDefinition struct {
 	DeleteRule        string
 }
 
+type TriggerDefinition struct {
+	TriggerName       string
+	EventManipulation string
+	EventObjectTable  string
+	ActionTiming      string
+	ActionStatement   string
+}
+
+type FunctionDefinition struct {
+	RoutineName       string
+	RoutineType       string
+	ReturnType        string
+	RoutineDefinition string
+}
+
 type SchemaSnapshot struct {
 	Tables      map[string]TableDefinition
 	Views       map[string]ViewDefinition
@@ -61,4 +76,17 @@ type SchemaSnapshot struct {
 	Constraints map[string]ConstraintDefinition
 	EnumTypes   map[string]EnumDefinition
 	ForeignKeys map[string]ForeignKeyDefinition
+	Triggers    map[string]TriggerDefinition
+	Functions   map[string]FunctionDefinition
+	Sequences   map[string]SequenceDefinition
+}
+
+type SequenceDefinition struct {
+	SequenceName string
+	DataType     string
+	StartValue   string
+	MinValue     string
+	MaxValue     string
+	Increment    string
+	CycleOption  string
 }

@@ -326,6 +326,93 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 			DeleteRule:        deleteRule,
 		}
 	}
+	triggersQuery := `
+		SELECT trigger_name, event_manipulation, event_object_table, action_timing, action_statement
+		FROM information_schema.triggers
+		WHERE trigger_schema = 'public'
+        ORDER BY trigger_name;
+	`
+	triggerRows, err := s.dbClient.Execute(triggersQuery)
+	if err != nil {
+		log.Fatalf("error querying triggers: %v", err)
+	}
+	defer triggerRows.Rows.Close()
+
+	if snapshot.Triggers == nil {
+		snapshot.Triggers = make(map[string]driver.TriggerDefinition)
+	}
+	for triggerRows.Rows.Next() {
+		var triggerName, eventManipulation, eventObjectTable, actionTiming, actionStatement string
+		if err := triggerRows.Rows.Scan(&triggerName, &eventManipulation, &eventObjectTable, &actionTiming, &actionStatement); err != nil {
+			log.Fatalf("error scanning trigger row: %v", err)
+		}
+		snapshot.Triggers[triggerName] = driver.TriggerDefinition{
+			TriggerName:       triggerName,
+			EventManipulation: eventManipulation,
+			EventObjectTable:  eventObjectTable,
+			ActionTiming:      actionTiming,
+			ActionStatement:   actionStatement,
+		}
+	}
+
+	functionsQuery := `
+		SELECT routine_name, routine_type, data_type, routine_definition
+		FROM information_schema.routines
+		WHERE specific_schema = 'public'
+		ORDER BY routine_name;
+	`
+	funcRows, err := s.dbClient.Execute(functionsQuery)
+	if err != nil {
+		log.Fatalf("error querying functions: %v", err)
+	}
+	defer funcRows.Rows.Close()
+
+	if snapshot.Functions == nil {
+		snapshot.Functions = make(map[string]driver.FunctionDefinition)
+	}
+	for funcRows.Rows.Next() {
+		var routineName, routineType, returnType, routineDefinition string
+		if err := funcRows.Rows.Scan(&routineName, &routineType, &returnType, &routineDefinition); err != nil {
+			log.Fatalf("error scanning function row: %v", err)
+		}
+		snapshot.Functions[routineName] = driver.FunctionDefinition{
+			RoutineName:       routineName,
+			RoutineType:       routineType,
+			ReturnType:        returnType,
+			RoutineDefinition: routineDefinition,
+		}
+	}
+
+	sequencesQuery := `
+		SELECT sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
+		FROM information_schema.sequences
+		WHERE sequence_schema = 'public'
+		ORDER BY sequence_name;
+	`
+	seqRows, err := s.dbClient.Execute(sequencesQuery)
+	if err != nil {
+		log.Fatalf("error querying sequences: %v", err)
+	}
+	defer seqRows.Rows.Close()
+
+	if snapshot.Sequences == nil {
+		snapshot.Sequences = make(map[string]driver.SequenceDefinition)
+	}
+	for seqRows.Rows.Next() {
+		var sequenceName, dataType, startValue, minValue, maxValue, increment, cycleOption string
+		if err := seqRows.Rows.Scan(&sequenceName, &dataType, &startValue, &minValue, &maxValue, &increment, &cycleOption); err != nil {
+			log.Fatalf("error scanning sequence row: %v", err)
+		}
+		snapshot.Sequences[sequenceName] = driver.SequenceDefinition{
+			SequenceName: sequenceName,
+			DataType:     dataType,
+			StartValue:   startValue,
+			MinValue:     minValue,
+			MaxValue:     maxValue,
+			Increment:    increment,
+			CycleOption:  cycleOption,
+		}
+	}
 	return snapshot, nil
 }
 
