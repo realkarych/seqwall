@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os/exec"
+	"runtime/debug"
 
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/realkarych/seqwall/pkg/driver"
@@ -147,6 +148,10 @@ func (s *StaircaseCli) makeDownStep(migration string, step int) {
 func (s *StaircaseCli) executeCommand(command string) (string, error) {
 	cmd := exec.Command("sh", "-c", command)
 	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Command '%s' failed with error: %v\nCallback:\n%s\nStacktrace:\n%s",
+			command, err, string(output), debug.Stack())
+	}
 	return string(output), err
 }
 
