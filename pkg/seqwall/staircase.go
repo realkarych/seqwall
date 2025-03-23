@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"os/exec"
+	"regexp"
 	"runtime/debug"
 
 	"github.com/pmezard/go-difflib/difflib"
@@ -423,6 +424,35 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 }
 
 func (s *StaircaseCli) compareSchemas(snapBefore, snapAfter *driver.SchemaSnapshot) {
+	normalizeConstraints := func(constraints map[string]driver.ConstraintDefinition) map[string]driver.ConstraintDefinition {
+		normalized := make(map[string]driver.ConstraintDefinition)
+		re := regexp.MustCompile(`^([A-Za-z0-9_]+)\s+IS\s+NOT\s+NULL$`)
+		for _, cons := range constraints {
+			if cons.ConstraintType == "CHECK" && cons.Definition.Valid {
+				matches := re.FindStringSubmatch(cons.Definition.String)
+				if len(matches) == 2 {
+					colName := matches[1]
+					newKey := cons.TableName + "_" + colName + "_not_null"
+					normalized[newKey] = cons
+					continue
+				}
+			}
+		}
+		for key, cons := range constraints {
+			if cons.ConstraintType == "CHECK" && cons.Definition.Valid {
+				matches := re.FindStringSubmatch(cons.Definition.String)
+				if len(matches) == 2 {
+					continue
+				}
+			}
+			normalized[key] = cons
+		}
+		return normalized
+	}
+
+	snapBefore.Constraints = normalizeConstraints(snapBefore.Constraints)
+	snapAfter.Constraints = normalizeConstraints(snapAfter.Constraints)
+
 	beforeJson, err := json.MarshalIndent(snapBefore, "", "  ")
 	if err != nil {
 		log.Fatalf("Error marshalling snapshot before: %v", err)
