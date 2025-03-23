@@ -92,12 +92,12 @@ func (s *StaircaseCli) processDownUpDown(migrations []string) {
 		}
 		s.makeDownStep(migration, i)
 		s.makeUpStep(migration, i)
-		s.makeDownStep(migration, i)
 		if s.testSchema {
 			snapAfter, _ = s.makeSchemaSnapshot()
 			s.compareSchemas(snapBefore, snapAfter)
 			log.Printf("schema snapshots are equal for migration %s at step %d", migration, i)
 		}
+		s.makeDownStep(migration, i)
 	}
 
 	log.Println("Staircase test (down-up-down) completed successfully!")
@@ -116,12 +116,12 @@ func (s *StaircaseCli) processUpDownUp(migrations []string) {
 		}
 		s.makeUpStep(migration, i)
 		s.makeDownStep(migration, i)
-		s.makeUpStep(migration, i)
 		if s.testSchema {
 			snapAfter, _ = s.makeSchemaSnapshot()
 			s.compareSchemas(snapBefore, snapAfter)
 			log.Printf("schema snapshots are equal for migration %s at step %d", migration, i)
 		}
+		s.makeUpStep(migration, i)
 	}
 
 	log.Println("Staircase test (up-down-up) completed successfully!")
