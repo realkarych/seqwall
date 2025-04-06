@@ -34,10 +34,10 @@ var staircaseCmd = &cobra.Command{
 	Long:  "Launch staircase testing to check the schema consistency",
 	PreRun: func(cmd *cobra.Command, args []string) {
 		if postgresUrl == "" {
-			postgresUrl = os.Getenv("POSTGRES_URL")
+			postgresUrl = os.Getenv("DATABASE_URL")
 		}
 		if postgresUrl == "" {
-			log.Fatalf("Error: postgres-url flag not provided and POSTGRES_URL environment variable is not set")
+			log.Fatalf("Error: postgres-url flag not provided and DATABASE_URL environment variable is not set")
 			os.Exit(ExitRuntimeError)
 		}
 	},
@@ -53,7 +53,7 @@ func init() {
 	staircaseCmd.Flags().IntVarP(&depth, "depth", "d", 0, "Depth of staircase testing (0 - all migrations)")
 	staircaseCmd.Flags().StringVar(&migrateUp, "migrate-up", "", "Migrate up command")
 	staircaseCmd.Flags().StringVar(&migrateDown, "migrate-down", "", "Migrate down command")
-	staircaseCmd.Flags().StringVar(&postgresUrl, "postgres-url", "", "Postgres URL (default: POSTGRES_URL environment variable)")
+	staircaseCmd.Flags().StringVar(&postgresUrl, "postgres-url", "", "Postgres URL (default: DATABASE_URL environment variable)")
 
 	staircaseCmd.MarkFlagRequired("migrations")
 	staircaseCmd.MarkFlagRequired("migrate-up")
