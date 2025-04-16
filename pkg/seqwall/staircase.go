@@ -82,27 +82,38 @@ func (s *StaircaseCli) actualiseDb(migrations []string) {
 }
 
 func (s *StaircaseCli) processDownUpDown(migrations []string) {
-	log.Println("Step 2: Run staircase test (down-up-down)...")
 	steps := s.calculateStairDepth(migrations)
-	log.Printf("Running staircase test with %d steps", steps)
 
 	for i := 1; i <= steps; i++ {
 		migration := migrations[len(migrations)-i]
-		var snapBefore, snapAfter *driver.SchemaSnapshot
+		var snapBeforeDown *driver.SchemaSnapshot
 		if s.testSchema {
-			snapBefore, _ = s.makeSchemaSnapshot()
+			snapBeforeDown, _ = s.makeSchemaSnapshot()
 		}
-		s.makeDownStep(migration, i)
-		s.makeUpStep(migration, i)
-		if s.testSchema {
-			snapAfter, _ = s.makeSchemaSnapshot()
-			s.compareSchemas(snapBefore, snapAfter)
-			log.Printf("schema snapshots are equal for migration %s at step %d", migration, i)
-		}
-		s.makeDownStep(migration, i)
-	}
 
-	log.Println("Staircase test (down-up-down) completed successfully!")
+		s.makeDownStep(migration, i)
+
+		var snapAfterFirstDown *driver.SchemaSnapshot
+		if s.testSchema {
+			snapAfterFirstDown, _ = s.makeSchemaSnapshot()
+		}
+
+		s.makeUpStep(migration, i)
+
+		if s.testSchema {
+			snapAfterDownUp, _ := s.makeSchemaSnapshot()
+			s.compareSchemas(snapBeforeDown, snapAfterDownUp)
+			log.Printf("Down→Up test passed for %s", migration)
+		}
+
+		s.makeDownStep(migration, i)
+
+		if s.testSchema {
+			snapAfterFinalDown, _ := s.makeSchemaSnapshot()
+			s.compareSchemas(snapAfterFirstDown, snapAfterFinalDown)
+			log.Printf("Final Down test passed for %s", migration)
+		}
+	}
 }
 
 func (s *StaircaseCli) processUpDownUp(migrations []string) {
@@ -177,7 +188,22 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 	}
 
 	columnsQuery := `
-        SELECT table_name, column_name, data_type, is_nullable, column_default, character_maximum_length, numeric_precision, numeric_scale
+        SELECT
+            table_name,
+            column_name,
+            data_type,
+            udt_name,
+            datetime_precision,
+            is_nullable,
+            collation_name,
+            is_identity,
+            identity_generation,
+            is_generated,
+            generation_expression,
+            column_default,
+            character_maximum_length,
+            numeric_precision,
+            numeric_scale
         FROM information_schema.columns
         WHERE table_schema = 'public'
         ORDER BY table_name, ordinal_position;
@@ -188,20 +214,44 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 	}
 	defer colRows.Rows.Close()
 	for colRows.Rows.Next() {
-		var tableName, columnName, dataType, isNullable string
-		var columnDefault sql.NullString
+		var tableName, columnName, dataType, udtName, isNullable, isIdentity, isGenerated string
+		var dateTimePrec sql.NullInt64
+		var columnDefault, collationName, identityGeneration, generationExpression sql.NullString
 		var charMaxLen, numPrecision, numScale sql.NullInt64
-		if err := colRows.Rows.Scan(&tableName, &columnName, &dataType, &isNullable, &columnDefault, &charMaxLen, &numPrecision, &numScale); err != nil {
+		if err := colRows.Rows.Scan(
+			&tableName,
+			&columnName,
+			&dataType,
+			&udtName,
+			&dateTimePrec,
+			&isNullable,
+			&collationName,
+			&isIdentity,
+			&identityGeneration,
+			&isGenerated,
+			&generationExpression,
+			&columnDefault,
+			&charMaxLen,
+			&numPrecision,
+			&numScale,
+		); err != nil {
 			log.Fatalf("error scanning column row: %v", err)
 		}
 		colDef := driver.ColumnDefinition{
 			ColumnName:             columnName,
 			DataType:               dataType,
+			UDTName:                udtName,
+			DateTimePrecision:      dateTimePrec,
 			IsNullable:             isNullable,
 			ColumnDefault:          columnDefault,
 			CharacterMaximumLength: charMaxLen,
 			NumericPrecision:       numPrecision,
 			NumericScale:           numScale,
+			IsIdentity:             isIdentity,
+			IdentityGeneration:     identityGeneration,
+			IsGenerated:            isGenerated,
+			GenerationExpression:   generationExpression,
+			CollationName:          collationName,
 		}
 		tableDef, exists := snapshot.Tables[tableName]
 		if !exists {
@@ -212,9 +262,11 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 	}
 
 	viewsQuery := `
-        SELECT table_name, view_definition
-        FROM information_schema.views
-        WHERE table_schema = 'public';
+        SELECT
+            viewname AS table_name,
+            pg_get_viewdef(viewname::regclass, true) AS definition
+        FROM pg_views
+        WHERE schemaname = 'public';
     `
 	viewRows, err := s.dbClient.Execute(viewsQuery)
 	if err != nil {
