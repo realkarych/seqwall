@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime/debug"
+	"strings"
 
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/realkarych/seqwall/pkg/driver"
@@ -72,7 +73,7 @@ func (s *StaircaseCli) processStaircase(migrations []string) {
 func (s *StaircaseCli) actualiseDb(migrations []string) {
 	for iter, migration := range migrations {
 		log.Printf("Running migration %d: %s", iter+1, migration)
-		output, err := s.executeCommand(s.migrateUp)
+		output, err := s.executeCommand(s.migrateUp, migration)
 		if err != nil {
 			log.Fatalf("Migration %s failed: %v", migration, err)
 		}
@@ -130,7 +131,7 @@ func (s *StaircaseCli) processUpDownUp(migrations []string) {
 
 func (s *StaircaseCli) makeUpStep(migration string, step int) {
 	log.Printf("Applying migration %s (step %d)", migration, step)
-	output, err := s.executeCommand(s.migrateUp)
+	output, err := s.executeCommand(s.migrateUp, migration)
 	if err != nil {
 		log.Fatalf("Migration %s failed: %v", migration, err)
 	}
@@ -139,14 +140,15 @@ func (s *StaircaseCli) makeUpStep(migration string, step int) {
 
 func (s *StaircaseCli) makeDownStep(migration string, step int) {
 	log.Printf("Reverting migration %s (step %d)", migration, step)
-	output, err := s.executeCommand(s.migrateDown)
+	output, err := s.executeCommand(s.migrateDown, migration)
 	if err != nil {
 		log.Fatalf("Migration %s failed: %v", migration, err)
 	}
 	log.Println("Migration reverted:", output)
 }
 
-func (s *StaircaseCli) executeCommand(command string) (string, error) {
+func (s *StaircaseCli) executeCommand(command, migration string) (string, error) {
+	command = strings.Replace(command, CurrentMigrationPlaceholder, migration, -1)
 	cmd := exec.Command("sh", "-c", command)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
