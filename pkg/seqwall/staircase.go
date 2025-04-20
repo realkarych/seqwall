@@ -186,7 +186,19 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		EnumTypes:   make(map[string]driver.EnumDefinition),
 		ForeignKeys: make(map[string]driver.ForeignKeyDefinition),
 	}
+	s.scanColumns(snapshot)
+	s.scanConstraints(snapshot)
+	s.scanEnums(snapshot)
+	s.scanFks(snapshot)
+	s.scanFunctions(snapshot)
+	s.scanIndexes(snapshot)
+	s.scanSeqs(snapshot)
+	s.scanTriggers(snapshot)
+	s.scanViews(snapshot)
+	return snapshot, nil
+}
 
+func (s *StaircaseCli) scanColumns(snapshot *driver.SchemaSnapshot) {
 	columnsQuery := `
         SELECT
             table_name,
@@ -260,7 +272,9 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		tableDef.Columns = append(tableDef.Columns, colDef)
 		snapshot.Tables[tableName] = tableDef
 	}
+}
 
+func (s *StaircaseCli) scanViews(snapshot *driver.SchemaSnapshot) {
 	viewsQuery := `
         SELECT
             viewname AS table_name,
@@ -280,7 +294,9 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		}
 		snapshot.Views[viewName] = driver.ViewDefinition{Definition: viewDefinition}
 	}
+}
 
+func (s *StaircaseCli) scanIndexes(snapshot *driver.SchemaSnapshot) {
 	indexesQuery := `
         SELECT indexname, indexdef
         FROM pg_indexes
@@ -298,7 +314,9 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		}
 		snapshot.Indexes[indexName] = driver.IndexDefinition{IndexDef: indexDef}
 	}
+}
 
+func (s *StaircaseCli) scanConstraints(snapshot *driver.SchemaSnapshot) {
 	constraintsQuery := `
         SELECT tc.constraint_name, tc.table_name, tc.constraint_type, cc.check_clause
         FROM information_schema.table_constraints tc
@@ -322,7 +340,9 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 			Definition:     checkClause,
 		}
 	}
+}
 
+func (s *StaircaseCli) scanEnums(snapshot *driver.SchemaSnapshot) {
 	enumQuery := `
         SELECT t.typname, e.enumlabel
         FROM pg_type t
@@ -346,7 +366,9 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		enumDef.Labels = append(enumDef.Labels, enumLabel)
 		snapshot.EnumTypes[typeName] = enumDef
 	}
+}
 
+func (s *StaircaseCli) scanFks(snapshot *driver.SchemaSnapshot) {
 	foreignKeysQuery := `
         SELECT
             tc.constraint_name,
@@ -387,6 +409,9 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 			DeleteRule:        deleteRule,
 		}
 	}
+}
+
+func (s *StaircaseCli) scanTriggers(snapshot *driver.SchemaSnapshot) {
 	triggersQuery := `
 		SELECT trigger_name, event_manipulation, event_object_table, action_timing, action_statement
 		FROM information_schema.triggers
@@ -415,7 +440,9 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 			ActionStatement:   actionStatement,
 		}
 	}
+}
 
+func (s *StaircaseCli) scanFunctions(snapshot *driver.SchemaSnapshot) {
 	functionsQuery := `
 		SELECT routine_name, routine_type, data_type, routine_definition
 		FROM information_schema.routines
@@ -443,7 +470,9 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 			RoutineDefinition: routineDefinition,
 		}
 	}
+}
 
+func (s *StaircaseCli) scanSeqs(snapshot *driver.SchemaSnapshot) {
 	sequencesQuery := `
 		SELECT sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
 		FROM information_schema.sequences
@@ -474,7 +503,6 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 			CycleOption:  cycleOption,
 		}
 	}
-	return snapshot, nil
 }
 
 func (s *StaircaseCli) compareSchemas(snapBefore, snapAfter *driver.SchemaSnapshot) {
