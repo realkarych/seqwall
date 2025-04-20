@@ -24,14 +24,14 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "seqwall",
-	Short: "Seqwall — CLI for testing your RawSQL migrations",
-	Long:  "Seqwall — CLI for testing your RawSQL migrations. Check https://github.com/realkarych/seqwall",
+	Short: "Seqwall — CLI for testing your PostgreSQL migrations",
+	Long:  "Seqwall — CLI for testing your PostgreSQL migrations. Check https://github.com/realkarych/seqwall",
 }
 
 var staircaseCmd = &cobra.Command{
 	Use:   "staircase",
 	Short: "Launch staircase testing",
-	Long:  "Launch staircase testing to check the schema consistency",
+	Long:  "Launch staircase testing to check the schema consistency. Remember that migrations should be in lexicographical order",
 	PreRun: func(cmd *cobra.Command, args []string) {
 		if postgresUrl == "" {
 			postgresUrl = os.Getenv("DATABASE_URL")
@@ -65,7 +65,7 @@ func init() {
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Fatalf("Saved from panic: %v", r)
+			log.Fatalf("From panic: %v", r)
 		}
 	}()
 
