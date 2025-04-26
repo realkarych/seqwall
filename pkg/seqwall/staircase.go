@@ -3,6 +3,7 @@ package seqwall
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os/exec"
 	"regexp"
@@ -41,121 +42,162 @@ func NewStaircaseCli(
 	}
 }
 
-func (s *StaircaseCli) Run() {
+func (s *StaircaseCli) Run() error {
 	client, err := driver.NewPostgresClient(s.postgresUrl)
 	if err != nil {
-		log.Fatalf("Failed to connect to Postgres: %v", err)
+		return fmt.Errorf("connect postgres: %w", err)
 	}
 	s.dbClient = client
 	defer s.dbClient.Close()
-
 	migrations, err := loadMigrations(s.migrationsPath)
 	if err != nil {
-		log.Fatalf("Failed to load migrations: %v", err)
+		return fmt.Errorf("load migrations: %w", err)
 	}
 	if len(migrations) == 0 {
-		log.Fatalf("No migrations found in %s", s.migrationsPath)
+		return fmt.Errorf("no migrations found in %s", s.migrationsPath)
 	}
-
-	log.Printf("Successfully recognized %d migrations!", len(migrations))
-	log.Println("Processing staircase...")
-
-	s.processStaircase(migrations)
+	log.Printf("Recognized %d migrations", len(migrations))
+	log.Println("Processing staircase…")
+	if err := s.processStaircase(migrations); err != nil {
+		return fmt.Errorf("staircase failed: %w", err)
+	}
+	return nil
 }
 
-func (s *StaircaseCli) processStaircase(migrations []string) {
-	log.Println("Step 1: DB actualisation. Migrating up all migrations...")
-	s.actualiseDb(migrations)
-	s.processDownUpDown(migrations)
-	s.processUpDownUp(migrations)
+func (s *StaircaseCli) processStaircase(migrations []string) error {
+	log.Println("Step 1: DB actualisation – migrating all migrations up…")
+	if err := s.actualiseDb(migrations); err != nil {
+		return fmt.Errorf("actualise db: %w", err)
+	}
+	if err := s.processDownUpDown(migrations); err != nil {
+		return fmt.Errorf("down-up-down phase: %w", err)
+	}
+	if err := s.processUpDownUp(migrations); err != nil {
+		return fmt.Errorf("up-down-up phase: %w", err)
+	}
+	return nil
 }
 
-func (s *StaircaseCli) actualiseDb(migrations []string) {
-	for iter, migration := range migrations {
-		log.Printf("Running migration %d: %s", iter+1, migration)
+func (s *StaircaseCli) actualiseDb(migrations []string) error {
+	for i, migration := range migrations {
+		log.Printf("Running migration %d/%d: %s", i+1, len(migrations), migration)
 		output, err := s.executeCommand(s.migrateUp, migration)
 		if err != nil {
-			log.Fatalf("Migration %s failed: %v", migration, err)
+			return fmt.Errorf("apply migration %q (step %d): %w", migration, i+1, err)
 		}
 		log.Println("Migration output:", output)
 	}
+	return nil
 }
 
-func (s *StaircaseCli) processDownUpDown(migrations []string) {
+func (s *StaircaseCli) processDownUpDown(migrations []string) error {
 	steps := s.calculateStairDepth(migrations)
-
 	for i := 1; i <= steps; i++ {
 		migration := migrations[len(migrations)-i]
-		var snapBeforeDown *driver.SchemaSnapshot
+		var snapBeforeDown, snapAfterFirstDown *driver.SchemaSnapshot
 		if s.testSchema {
-			snapBeforeDown, _ = s.makeSchemaSnapshot()
+			var err error
+			snapBeforeDown, err = s.makeSchemaSnapshot()
+			if err != nil {
+				return fmt.Errorf("snapshot before first down %q: %w", migration, err)
+			}
 		}
-
-		s.makeDownStep(migration, i)
-
-		var snapAfterFirstDown *driver.SchemaSnapshot
-		if s.testSchema {
-			snapAfterFirstDown, _ = s.makeSchemaSnapshot()
+		if err := s.makeDownStep(migration, i); err != nil {
+			return fmt.Errorf("down step %q: %w", migration, err)
 		}
-
-		s.makeUpStep(migration, i)
-
 		if s.testSchema {
-			snapAfterDownUp, _ := s.makeSchemaSnapshot()
-			s.compareSchemas(snapBeforeDown, snapAfterDownUp)
+			var err error
+			snapAfterFirstDown, err = s.makeSchemaSnapshot()
+			if err != nil {
+				return fmt.Errorf("snapshot after first down %q: %w", migration, err)
+			}
+		}
+		if err := s.makeUpStep(migration, i); err != nil {
+			return fmt.Errorf("up step %q: %w", migration, err)
+		}
+		if s.testSchema {
+			snapAfterDownUp, err := s.makeSchemaSnapshot()
+			if err != nil {
+				return fmt.Errorf("snapshot after down-up %q: %w", migration, err)
+			}
+			if err := s.compareSchemas(snapBeforeDown, snapAfterDownUp); err != nil {
+				return fmt.Errorf("compare down-up %q: %w", migration, err)
+			}
 			log.Printf("Down→Up test passed for %s", migration)
 		}
-
-		s.makeDownStep(migration, i)
-
+		if err := s.makeDownStep(migration, i); err != nil {
+			return fmt.Errorf("final down step %q: %w", migration, err)
+		}
 		if s.testSchema {
-			snapAfterFinalDown, _ := s.makeSchemaSnapshot()
-			s.compareSchemas(snapAfterFirstDown, snapAfterFinalDown)
+			snapAfterFinalDown, err := s.makeSchemaSnapshot()
+			if err != nil {
+				return fmt.Errorf("snapshot after final down %q: %w", migration, err)
+			}
+			if err := s.compareSchemas(snapAfterFirstDown, snapAfterFinalDown); err != nil {
+				return fmt.Errorf("compare final down %q: %w", migration, err)
+			}
 			log.Printf("Final Down test passed for %s", migration)
 		}
 	}
+	return nil
 }
 
-func (s *StaircaseCli) processUpDownUp(migrations []string) {
+func (s *StaircaseCli) processUpDownUp(migrations []string) error {
 	log.Println("Step 3: Run staircase test (up-down-up)...")
 	steps := s.calculateStairDepth(migrations)
 	log.Printf("Running staircase test with %d steps", steps)
-
 	for i := 1; i <= steps; i++ {
 		migration := migrations[i-1]
-		var snapBefore, snapAfter *driver.SchemaSnapshot
+		var snapBefore *driver.SchemaSnapshot
 		if s.testSchema {
-			snapBefore, _ = s.makeSchemaSnapshot()
+			var err error
+			snapBefore, err = s.makeSchemaSnapshot()
+			if err != nil {
+				return fmt.Errorf("snapshot before up %q: %w", migration, err)
+			}
 		}
-		s.makeUpStep(migration, i)
-		s.makeDownStep(migration, i)
+		if err := s.makeUpStep(migration, i); err != nil {
+			return fmt.Errorf("up step %q: %w", migration, err)
+		}
+		if err := s.makeDownStep(migration, i); err != nil {
+			return fmt.Errorf("down step %q: %w", migration, err)
+		}
 		if s.testSchema {
-			snapAfter, _ = s.makeSchemaSnapshot()
-			s.compareSchemas(snapBefore, snapAfter)
+			snapAfter, err := s.makeSchemaSnapshot()
+			if err != nil {
+				return fmt.Errorf("snapshot after down %q: %w", migration, err)
+			}
+			if err := s.compareSchemas(snapBefore, snapAfter); err != nil {
+				return fmt.Errorf("compare up-down %q: %w", migration, err)
+			}
 			log.Printf("schema snapshots are equal for migration %s at step %d", migration, i)
 		}
-		s.makeUpStep(migration, i)
+		if err := s.makeUpStep(migration, i); err != nil {
+			return fmt.Errorf("final up step %q: %w", migration, err)
+		}
 	}
-
 	log.Println("Staircase test (up-down-up) completed successfully!")
+	return nil
 }
 
-func (s *StaircaseCli) makeUpStep(migration string, step int) {
+func (s *StaircaseCli) makeUpStep(migration string, step int) error {
 	log.Printf("Applying migration %s (step %d)", migration, step)
 	output, err := s.executeCommand(s.migrateUp, migration)
 	if err != nil {
-		log.Fatalf("Migration %s failed: %v", migration, err)
+		return fmt.Errorf("apply migration %q (step %d): %w", migration, step, err)
 	}
 	log.Println("Migration applied:", output)
+	return nil
 }
 
-func (s *StaircaseCli) makeDownStep(migration string, step int) {
+func (s *StaircaseCli) makeDownStep(migration string, step int) error {
 	log.Printf("Reverting migration %s (step %d)", migration, step)
 	output, err := s.executeCommand(s.migrateDown, migration)
 	if err != nil {
-		log.Fatalf("Migration %s failed: %v", migration, err)
+		return fmt.Errorf("revert migration %q (step %d): %w", migration, step, err)
 	}
 	log.Println("Migration reverted:", output)
+	return nil
 }
 
 func (s *StaircaseCli) executeCommand(command, migration string) (string, error) {
@@ -198,8 +240,8 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 	return snapshot, nil
 }
 
-func (s *StaircaseCli) scanColumns(snapshot *driver.SchemaSnapshot) {
-	columnsQuery := `
+func (s *StaircaseCli) scanColumns(snapshot *driver.SchemaSnapshot) error {
+	const columnsQuery = `
         SELECT
             table_name,
             column_name,
@@ -222,14 +264,19 @@ func (s *StaircaseCli) scanColumns(snapshot *driver.SchemaSnapshot) {
     `
 	colRows, err := s.dbClient.Execute(columnsQuery)
 	if err != nil {
-		log.Fatalf("error querying columns: %v", err)
+		return fmt.Errorf("query columns: %w", err)
 	}
 	defer colRows.Rows.Close()
+
 	for colRows.Rows.Next() {
-		var tableName, columnName, dataType, udtName, isNullable, isIdentity, isGenerated string
-		var dateTimePrec sql.NullInt64
-		var columnDefault, collationName, identityGeneration, generationExpression sql.NullString
-		var charMaxLen, numPrecision, numScale sql.NullInt64
+		var (
+			tableName, columnName, dataType, udtName         string
+			isNullable, isIdentity, isGenerated              string
+			dateTimePrec                                     sql.NullInt64
+			columnDefault, collationName, identityGeneration sql.NullString
+			generationExpression                             sql.NullString
+			charMaxLen, numPrecision, numScale               sql.NullInt64
+		)
 		if err := colRows.Rows.Scan(
 			&tableName,
 			&columnName,
@@ -247,8 +294,9 @@ func (s *StaircaseCli) scanColumns(snapshot *driver.SchemaSnapshot) {
 			&numPrecision,
 			&numScale,
 		); err != nil {
-			log.Fatalf("error scanning column row: %v", err)
+			return fmt.Errorf("scan column row: %w", err)
 		}
+
 		colDef := driver.ColumnDefinition{
 			ColumnName:             columnName,
 			DataType:               dataType,
@@ -265,17 +313,20 @@ func (s *StaircaseCli) scanColumns(snapshot *driver.SchemaSnapshot) {
 			GenerationExpression:   generationExpression,
 			CollationName:          collationName,
 		}
-		tableDef, exists := snapshot.Tables[tableName]
-		if !exists {
-			tableDef = driver.TableDefinition{}
-		}
-		tableDef.Columns = append(tableDef.Columns, colDef)
-		snapshot.Tables[tableName] = tableDef
+
+		td := snapshot.Tables[tableName]
+		td.Columns = append(td.Columns, colDef)
+		snapshot.Tables[tableName] = td
 	}
+	if err := colRows.Rows.Err(); err != nil {
+		return fmt.Errorf("iterate column rows: %w", err)
+	}
+
+	return nil
 }
 
-func (s *StaircaseCli) scanViews(snapshot *driver.SchemaSnapshot) {
-	viewsQuery := `
+func (s *StaircaseCli) scanViews(snapshot *driver.SchemaSnapshot) error {
+	const viewsQuery = `
         SELECT
             viewname AS table_name,
             pg_get_viewdef(viewname::regclass, true) AS definition
@@ -284,55 +335,75 @@ func (s *StaircaseCli) scanViews(snapshot *driver.SchemaSnapshot) {
     `
 	viewRows, err := s.dbClient.Execute(viewsQuery)
 	if err != nil {
-		log.Fatalf("error querying views: %v", err)
+		return fmt.Errorf("query views: %w", err)
 	}
 	defer viewRows.Rows.Close()
 	for viewRows.Rows.Next() {
 		var viewName, viewDefinition string
 		if err := viewRows.Rows.Scan(&viewName, &viewDefinition); err != nil {
-			log.Fatalf("error scanning view row: %v", err)
+			return fmt.Errorf("scan view row: %w", err)
 		}
 		snapshot.Views[viewName] = driver.ViewDefinition{Definition: viewDefinition}
 	}
+	if err := viewRows.Rows.Err(); err != nil {
+		return fmt.Errorf("iterate view rows: %w", err)
+	}
+	return nil
 }
 
-func (s *StaircaseCli) scanIndexes(snapshot *driver.SchemaSnapshot) {
-	indexesQuery := `
+func (s *StaircaseCli) scanIndexes(snapshot *driver.SchemaSnapshot) error {
+	const indexesQuery = `
         SELECT indexname, indexdef
         FROM pg_indexes
         WHERE schemaname = 'public';
     `
 	indexRows, err := s.dbClient.Execute(indexesQuery)
 	if err != nil {
-		log.Fatalf("error querying indexes: %v", err)
+		return fmt.Errorf("query indexes: %w", err)
 	}
 	defer indexRows.Rows.Close()
 	for indexRows.Rows.Next() {
 		var indexName, indexDef string
 		if err := indexRows.Rows.Scan(&indexName, &indexDef); err != nil {
-			log.Fatalf("error scanning index row: %v", err)
+			return fmt.Errorf("scan index row: %w", err)
 		}
 		snapshot.Indexes[indexName] = driver.IndexDefinition{IndexDef: indexDef}
 	}
+	if err := indexRows.Rows.Err(); err != nil {
+		return fmt.Errorf("iterate index rows: %w", err)
+	}
+	return nil
 }
 
-func (s *StaircaseCli) scanConstraints(snapshot *driver.SchemaSnapshot) {
-	constraintsQuery := `
-        SELECT tc.constraint_name, tc.table_name, tc.constraint_type, cc.check_clause
+func (s *StaircaseCli) scanConstraints(snapshot *driver.SchemaSnapshot) error {
+	const constraintsQuery = `
+        SELECT
+            tc.constraint_name,
+            tc.table_name,
+            tc.constraint_type,
+            cc.check_clause
         FROM information_schema.table_constraints tc
-        LEFT JOIN information_schema.check_constraints cc ON tc.constraint_name = cc.constraint_name
+        LEFT JOIN information_schema.check_constraints cc
+               ON tc.constraint_name = cc.constraint_name
         WHERE tc.table_schema = 'public';
     `
 	constrRows, err := s.dbClient.Execute(constraintsQuery)
 	if err != nil {
-		log.Fatalf("error querying constraints: %v", err)
+		return fmt.Errorf("query constraints: %w", err)
 	}
 	defer constrRows.Rows.Close()
 	for constrRows.Rows.Next() {
-		var constraintName, tableName, constraintType string
-		var checkClause sql.NullString
-		if err := constrRows.Rows.Scan(&constraintName, &tableName, &constraintType, &checkClause); err != nil {
-			log.Fatalf("error scanning constraint row: %v", err)
+		var (
+			constraintName, tableName, constraintType string
+			checkClause                               sql.NullString
+		)
+		if err := constrRows.Rows.Scan(
+			&constraintName,
+			&tableName,
+			&constraintType,
+			&checkClause,
+		); err != nil {
+			return fmt.Errorf("scan constraint row: %w", err)
 		}
 		snapshot.Constraints[constraintName] = driver.ConstraintDefinition{
 			TableName:      tableName,
@@ -340,64 +411,79 @@ func (s *StaircaseCli) scanConstraints(snapshot *driver.SchemaSnapshot) {
 			Definition:     checkClause,
 		}
 	}
+	if err := constrRows.Rows.Err(); err != nil {
+		return fmt.Errorf("iterate constraint rows: %w", err)
+	}
+	return nil
 }
 
-func (s *StaircaseCli) scanEnums(snapshot *driver.SchemaSnapshot) {
-	enumQuery := `
-        SELECT t.typname, e.enumlabel
+func (s *StaircaseCli) scanEnums(snapshot *driver.SchemaSnapshot) error {
+	const enumQuery = `
+        SELECT
+            t.typname,
+            e.enumlabel
         FROM pg_type t
         JOIN pg_enum e ON t.oid = e.enumtypid
         ORDER BY t.typname, e.enumsortorder;
     `
 	enumRows, err := s.dbClient.Execute(enumQuery)
 	if err != nil {
-		log.Fatalf("error querying enum types: %v", err)
+		return fmt.Errorf("query enum types: %w", err)
 	}
 	defer enumRows.Rows.Close()
 	for enumRows.Rows.Next() {
 		var typeName, enumLabel string
 		if err := enumRows.Rows.Scan(&typeName, &enumLabel); err != nil {
-			log.Fatalf("error scanning enum row: %v", err)
+			return fmt.Errorf("scan enum row: %w", err)
 		}
-		enumDef, exists := snapshot.EnumTypes[typeName]
-		if !exists {
-			enumDef = driver.EnumDefinition{}
-		}
-		enumDef.Labels = append(enumDef.Labels, enumLabel)
-		snapshot.EnumTypes[typeName] = enumDef
+		def := snapshot.EnumTypes[typeName]
+		def.Labels = append(def.Labels, enumLabel)
+		snapshot.EnumTypes[typeName] = def
 	}
+	if err := enumRows.Rows.Err(); err != nil {
+		return fmt.Errorf("iterate enum rows: %w", err)
+	}
+	return nil
 }
 
-func (s *StaircaseCli) scanFks(snapshot *driver.SchemaSnapshot) {
-	foreignKeysQuery := `
+func (s *StaircaseCli) scanFks(snapshot *driver.SchemaSnapshot) error {
+	const foreignKeysQuery = `
         SELECT
             tc.constraint_name,
             tc.table_name,
             kcu.column_name,
-            ccu.table_name AS foreign_table_name,
+            ccu.table_name  AS foreign_table_name,
             ccu.column_name AS foreign_column_name,
             rc.update_rule,
             rc.delete_rule
-        FROM
-            information_schema.table_constraints AS tc
-        JOIN information_schema.key_column_usage AS kcu
-            ON tc.constraint_name = kcu.constraint_name
-        JOIN information_schema.referential_constraints AS rc
-            ON tc.constraint_name = rc.constraint_name
-        JOIN information_schema.constraint_column_usage AS ccu
-            ON ccu.constraint_name = tc.constraint_name
+        FROM information_schema.table_constraints        AS tc
+        JOIN information_schema.key_column_usage         AS kcu ON tc.constraint_name = kcu.constraint_name
+        JOIN information_schema.referential_constraints  AS rc  ON tc.constraint_name = rc.constraint_name
+        JOIN information_schema.constraint_column_usage  AS ccu ON ccu.constraint_name = tc.constraint_name
         WHERE tc.constraint_type = 'FOREIGN KEY'
-        AND tc.table_schema = 'public';
+          AND tc.table_schema  = 'public';
     `
-	foreignRows, err := s.dbClient.Execute(foreignKeysQuery)
+	rows, err := s.dbClient.Execute(foreignKeysQuery)
 	if err != nil {
-		log.Fatalf("error querying foreign keys: %v", err)
+		return fmt.Errorf("query foreign keys: %w", err)
 	}
-	defer foreignRows.Rows.Close()
-	for foreignRows.Rows.Next() {
-		var constraintName, tableName, columnName, foreignTableName, foreignColumnName, updateRule, deleteRule string
-		if err := foreignRows.Rows.Scan(&constraintName, &tableName, &columnName, &foreignTableName, &foreignColumnName, &updateRule, &deleteRule); err != nil {
-			log.Fatalf("error scanning foreign key row: %v", err)
+	defer rows.Rows.Close()
+	for rows.Rows.Next() {
+		var (
+			constraintName, tableName, columnName string
+			foreignTableName, foreignColumnName   string
+			updateRule, deleteRule                string
+		)
+		if err := rows.Rows.Scan(
+			&constraintName,
+			&tableName,
+			&columnName,
+			&foreignTableName,
+			&foreignColumnName,
+			&updateRule,
+			&deleteRule,
+		); err != nil {
+			return fmt.Errorf("scan foreign key row: %w", err)
 		}
 		snapshot.ForeignKeys[constraintName] = driver.ForeignKeyDefinition{
 			ConstraintName:    constraintName,
@@ -409,28 +495,45 @@ func (s *StaircaseCli) scanFks(snapshot *driver.SchemaSnapshot) {
 			DeleteRule:        deleteRule,
 		}
 	}
+	if err := rows.Rows.Err(); err != nil {
+		return fmt.Errorf("iterate foreign key rows: %w", err)
+	}
+	return nil
 }
 
-func (s *StaircaseCli) scanTriggers(snapshot *driver.SchemaSnapshot) {
-	triggersQuery := `
-		SELECT trigger_name, event_manipulation, event_object_table, action_timing, action_statement
+func (s *StaircaseCli) scanTriggers(snapshot *driver.SchemaSnapshot) error {
+	const triggersQuery = `
+		SELECT
+			trigger_name,
+			event_manipulation,
+			event_object_table,
+			action_timing,
+			action_statement
 		FROM information_schema.triggers
 		WHERE trigger_schema = 'public'
-        ORDER BY trigger_name;
+		ORDER BY trigger_name;
 	`
-	triggerRows, err := s.dbClient.Execute(triggersQuery)
+	rows, err := s.dbClient.Execute(triggersQuery)
 	if err != nil {
-		log.Fatalf("error querying triggers: %v", err)
+		return fmt.Errorf("query triggers: %w", err)
 	}
-	defer triggerRows.Rows.Close()
-
+	defer rows.Rows.Close()
 	if snapshot.Triggers == nil {
 		snapshot.Triggers = make(map[string]driver.TriggerDefinition)
 	}
-	for triggerRows.Rows.Next() {
-		var triggerName, eventManipulation, eventObjectTable, actionTiming, actionStatement string
-		if err := triggerRows.Rows.Scan(&triggerName, &eventManipulation, &eventObjectTable, &actionTiming, &actionStatement); err != nil {
-			log.Fatalf("error scanning trigger row: %v", err)
+	for rows.Rows.Next() {
+		var (
+			triggerName, eventManipulation, eventObjectTable string
+			actionTiming, actionStatement                    string
+		)
+		if err := rows.Rows.Scan(
+			&triggerName,
+			&eventManipulation,
+			&eventObjectTable,
+			&actionTiming,
+			&actionStatement,
+		); err != nil {
+			return fmt.Errorf("scan trigger row: %w", err)
 		}
 		snapshot.Triggers[triggerName] = driver.TriggerDefinition{
 			TriggerName:       triggerName,
@@ -440,28 +543,31 @@ func (s *StaircaseCli) scanTriggers(snapshot *driver.SchemaSnapshot) {
 			ActionStatement:   actionStatement,
 		}
 	}
+	if err := rows.Rows.Err(); err != nil {
+		return fmt.Errorf("iterate trigger rows: %w", err)
+	}
+	return nil
 }
 
-func (s *StaircaseCli) scanFunctions(snapshot *driver.SchemaSnapshot) {
-	functionsQuery := `
+func (s *StaircaseCli) scanFunctions(snapshot *driver.SchemaSnapshot) error {
+	const q = `
 		SELECT routine_name, routine_type, data_type, routine_definition
 		FROM information_schema.routines
 		WHERE specific_schema = 'public'
 		ORDER BY routine_name;
 	`
-	funcRows, err := s.dbClient.Execute(functionsQuery)
+	rows, err := s.dbClient.Execute(q)
 	if err != nil {
-		log.Fatalf("error querying functions: %v", err)
+		return fmt.Errorf("query functions: %w", err)
 	}
-	defer funcRows.Rows.Close()
-
+	defer rows.Rows.Close()
 	if snapshot.Functions == nil {
 		snapshot.Functions = make(map[string]driver.FunctionDefinition)
 	}
-	for funcRows.Rows.Next() {
+	for rows.Rows.Next() {
 		var routineName, routineType, returnType, routineDefinition string
-		if err := funcRows.Rows.Scan(&routineName, &routineType, &returnType, &routineDefinition); err != nil {
-			log.Fatalf("error scanning function row: %v", err)
+		if err := rows.Rows.Scan(&routineName, &routineType, &returnType, &routineDefinition); err != nil {
+			return fmt.Errorf("scan function row: %w", err)
 		}
 		snapshot.Functions[routineName] = driver.FunctionDefinition{
 			RoutineName:       routineName,
@@ -470,28 +576,35 @@ func (s *StaircaseCli) scanFunctions(snapshot *driver.SchemaSnapshot) {
 			RoutineDefinition: routineDefinition,
 		}
 	}
+	if err := rows.Rows.Err(); err != nil {
+		return fmt.Errorf("iterate function rows: %w", err)
+	}
+	return nil
 }
 
-func (s *StaircaseCli) scanSeqs(snapshot *driver.SchemaSnapshot) {
-	sequencesQuery := `
+func (s *StaircaseCli) scanSeqs(snapshot *driver.SchemaSnapshot) error {
+	const q = `
 		SELECT sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
 		FROM information_schema.sequences
 		WHERE sequence_schema = 'public'
 		ORDER BY sequence_name;
 	`
-	seqRows, err := s.dbClient.Execute(sequencesQuery)
+	rows, err := s.dbClient.Execute(q)
 	if err != nil {
-		log.Fatalf("error querying sequences: %v", err)
+		return fmt.Errorf("query sequences: %w", err)
 	}
-	defer seqRows.Rows.Close()
-
+	defer rows.Rows.Close()
 	if snapshot.Sequences == nil {
 		snapshot.Sequences = make(map[string]driver.SequenceDefinition)
 	}
-	for seqRows.Rows.Next() {
-		var sequenceName, dataType, startValue, minValue, maxValue, increment, cycleOption string
-		if err := seqRows.Rows.Scan(&sequenceName, &dataType, &startValue, &minValue, &maxValue, &increment, &cycleOption); err != nil {
-			log.Fatalf("error scanning sequence row: %v", err)
+	for rows.Rows.Next() {
+		var (
+			sequenceName, dataType, startValue string
+			minValue, maxValue, increment      string
+			cycleOption                        string
+		)
+		if err := rows.Rows.Scan(&sequenceName, &dataType, &startValue, &minValue, &maxValue, &increment, &cycleOption); err != nil {
+			return fmt.Errorf("scan sequence row: %w", err)
 		}
 		snapshot.Sequences[sequenceName] = driver.SequenceDefinition{
 			SequenceName: sequenceName,
@@ -503,58 +616,58 @@ func (s *StaircaseCli) scanSeqs(snapshot *driver.SchemaSnapshot) {
 			CycleOption:  cycleOption,
 		}
 	}
+	if err := rows.Rows.Err(); err != nil {
+		return fmt.Errorf("iterate sequence rows: %w", err)
+	}
+	return nil
 }
 
-func (s *StaircaseCli) compareSchemas(snapBefore, snapAfter *driver.SchemaSnapshot) {
-	normalizeConstraints := func(constraints map[string]driver.ConstraintDefinition) map[string]driver.ConstraintDefinition {
-		normalized := make(map[string]driver.ConstraintDefinition)
+func (s *StaircaseCli) compareSchemas(before, after *driver.SchemaSnapshot) error {
+	normalize := func(src map[string]driver.ConstraintDefinition) map[string]driver.ConstraintDefinition {
+		res := make(map[string]driver.ConstraintDefinition)
 		re := regexp.MustCompile(`^([A-Za-z0-9_]+)\s+IS\s+NOT\s+NULL$`)
-		for _, cons := range constraints {
-			if cons.ConstraintType == "CHECK" && cons.Definition.Valid {
-				matches := re.FindStringSubmatch(cons.Definition.String)
-				if len(matches) == 2 {
-					colName := matches[1]
-					newKey := cons.TableName + "_" + colName + "_not_null"
-					normalized[newKey] = cons
+		for _, c := range src {
+			if c.ConstraintType == "CHECK" && c.Definition.Valid {
+				if m := re.FindStringSubmatch(c.Definition.String); len(m) == 2 {
+					k := c.TableName + "_" + m[1] + "_not_null"
+					res[k] = c
 					continue
 				}
 			}
 		}
-		for key, cons := range constraints {
-			if cons.ConstraintType == "CHECK" && cons.Definition.Valid {
-				matches := re.FindStringSubmatch(cons.Definition.String)
-				if len(matches) == 2 {
+		for k, c := range src {
+			if c.ConstraintType == "CHECK" && c.Definition.Valid {
+				if re.MatchString(c.Definition.String) {
 					continue
 				}
 			}
-			normalized[key] = cons
+			res[k] = c
 		}
-		return normalized
+		return res
 	}
-
-	snapBefore.Constraints = normalizeConstraints(snapBefore.Constraints)
-	snapAfter.Constraints = normalizeConstraints(snapAfter.Constraints)
-
-	beforeJson, err := json.MarshalIndent(snapBefore, "", "  ")
+	before.Constraints = normalize(before.Constraints)
+	after.Constraints = normalize(after.Constraints)
+	b, err := json.MarshalIndent(before, "", "  ")
 	if err != nil {
-		log.Fatalf("Error marshalling snapshot before: %v", err)
+		return fmt.Errorf("marshal before: %w", err)
 	}
-	afterJson, err := json.MarshalIndent(snapAfter, "", "  ")
+	a, err := json.MarshalIndent(after, "", "  ")
 	if err != nil {
-		log.Fatalf("Error marshalling snapshot after: %v", err)
+		return fmt.Errorf("marshal after: %w", err)
 	}
 	diff := difflib.UnifiedDiff{
-		A:        difflib.SplitLines(string(beforeJson)),
-		B:        difflib.SplitLines(string(afterJson)),
+		A:        difflib.SplitLines(string(b)),
+		B:        difflib.SplitLines(string(a)),
 		FromFile: "Snapshot Before",
 		ToFile:   "Snapshot After",
 		Context:  3,
 	}
-	diffText, err := difflib.GetUnifiedDiffString(diff)
+	out, err := difflib.GetUnifiedDiffString(diff)
 	if err != nil {
-		log.Fatalf("Error generating diff: %v", err)
+		return fmt.Errorf("diff: %w", err)
 	}
-	if diffText != "" {
-		log.Fatalf("Schema snapshots differ:\n%s", diffText)
+	if out != "" {
+		return fmt.Errorf("schema snapshots differ:\n%s", out)
 	}
+	return nil
 }

@@ -43,7 +43,9 @@ var staircaseCmd = &cobra.Command{
 	},
 	Run: func(cmd *cobra.Command, args []string) {
 		cli := seqwall.NewStaircaseCli(migrationsPath, testSchema, depth, migrateUp, migrateDown, postgresUrl)
-		cli.Run()
+		if err := cli.Run(); err != nil {
+			log.Fatalf("Error: %v", err)
+		}
 	},
 }
 
