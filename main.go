@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -9,8 +10,8 @@ import (
 )
 
 const (
-	ExitOk           = 0
-	ExitRuntimeError = 1
+	exitOK    = 0
+	exitError = 1
 )
 
 var (
@@ -19,61 +20,73 @@ var (
 	depth          int
 	migrateUp      string
 	migrateDown    string
-	postgresUrl    string
+	postgresURL    string
 )
-
-var rootCmd = &cobra.Command{
-	Use:   "seqwall",
-	Short: "Seqwall — CLI for testing your PostgreSQL migrations",
-	Long:  "Seqwall — CLI for testing your PostgreSQL migrations. Check https://github.com/realkarych/seqwall",
-}
-
-var staircaseCmd = &cobra.Command{
-	Use:   "staircase",
-	Short: "Launch staircase testing",
-	Long:  "Launch staircase testing to check the schema consistency. Remember that migrations should be in lexicographical order",
-	PreRun: func(cmd *cobra.Command, args []string) {
-		if postgresUrl == "" {
-			postgresUrl = os.Getenv("DATABASE_URL")
-		}
-		if postgresUrl == "" {
-			log.Fatalf("Error: postgres-url flag not provided and DATABASE_URL environment variable is not set")
-			os.Exit(ExitRuntimeError)
-		}
-	},
-	Run: func(cmd *cobra.Command, args []string) {
-		cli := seqwall.NewStaircaseCli(migrationsPath, testSchema, depth, migrateUp, migrateDown, postgresUrl)
-		if err := cli.Run(); err != nil {
-			log.Fatalf("Error: %v", err)
-		}
-	},
-}
-
-func init() {
-	staircaseCmd.Flags().StringVarP(&migrationsPath, "migrations", "m", "", "Path for migrations")
-	staircaseCmd.Flags().BoolVar(&testSchema, "test-schema", true, "Check schema consistency or not (default: true)")
-	staircaseCmd.Flags().IntVarP(&depth, "depth", "d", 0, "Depth of staircase testing (0 - all migrations)")
-	staircaseCmd.Flags().StringVar(&migrateUp, "migrate-up", "", "Migrate up command")
-	staircaseCmd.Flags().StringVar(&migrateDown, "migrate-down", "", "Migrate down command")
-	staircaseCmd.Flags().StringVar(&postgresUrl, "postgres-url", "", "Postgres URL (default: DATABASE_URL environment variable)")
-
-	staircaseCmd.MarkFlagRequired("migrations")
-	staircaseCmd.MarkFlagRequired("migrate-up")
-	staircaseCmd.MarkFlagRequired("migrate-down")
-
-	rootCmd.AddCommand(staircaseCmd)
-}
 
 func main() {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Fatalf("From panic: %v", r)
+			log.Printf("panic: %v", r)
+			os.Exit(exitError)
 		}
 	}()
 
-	if err := rootCmd.Execute(); err != nil {
-		log.Fatalf("Command execution failed: %v", err)
+	if err := newRootCmd().Execute(); err != nil {
+		log.Println(err)
+		os.Exit(exitError)
 	}
-	log.Println("Execution completed successfully.")
-	os.Exit(ExitOk)
+	os.Exit(exitOK)
+}
+
+func newRootCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:           "seqwall",
+		Short:         "Seqwall — CLI for testing PostgreSQL migrations",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+	}
+
+	root.AddCommand(newStaircaseCmd())
+	return root
+}
+
+func newStaircaseCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "staircase",
+		Short: "Launch staircase testing",
+		Long:  "Launch staircase testing to check schema consistency. Migrations must be in lexicographical order.",
+		PreRunE: func(cmd *cobra.Command, _ []string) error {
+			if postgresURL == "" {
+				postgresURL = os.Getenv("DATABASE_URL")
+			}
+			if postgresURL == "" {
+				return fmt.Errorf("--postgres-url flag or DATABASE_URL env is required")
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			cli := seqwall.NewStaircaseCli(
+				migrationsPath,
+				testSchema,
+				depth,
+				migrateUp,
+				migrateDown,
+				postgresURL,
+			)
+			return cli.Run()
+		},
+	}
+
+	cmd.Flags().StringVarP(&migrationsPath, "migrations", "m", "", "Path to migrations (required)")
+	cmd.Flags().BoolVar(&testSchema, "test-schema", true, "Compare schema snapshots (default true)")
+	cmd.Flags().IntVarP(&depth, "depth", "d", 0, "Depth of staircase testing (0 = all)")
+	cmd.Flags().StringVar(&migrateUp, "migrate-up", "", "Shell command that applies a migration (required)")
+	cmd.Flags().StringVar(&migrateDown, "migrate-down", "", "Shell command that reverts a migration (required)")
+	cmd.Flags().StringVar(&postgresURL, "postgres-url", "", "PostgreSQL URL (fallback: $DATABASE_URL)")
+
+	_ = cmd.MarkFlagRequired("migrations")
+	_ = cmd.MarkFlagRequired("migrate-up")
+	_ = cmd.MarkFlagRequired("migrate-down")
+
+	return cmd
 }
