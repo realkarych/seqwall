@@ -145,34 +145,35 @@ func (s *StaircaseCli) processDownUpDown(migrations []string) error {
 func (s *StaircaseCli) processUpDownUp(migrations []string) error {
 	log.Println("Step 3: Run staircase test (up-down-up)...")
 	steps := s.calculateStairDepth(migrations)
+	tail := migrations[len(migrations)-steps:]
 	log.Printf("Running staircase test with %d steps", steps)
-	for i := 1; i <= steps; i++ {
-		migration := migrations[i-1]
-		var snapBefore *driver.SchemaSnapshot
+	for i, migration := range tail {
+		step := i + 1
+		var before *driver.SchemaSnapshot
 		if s.testSchema {
 			var err error
-			snapBefore, err = s.makeSchemaSnapshot()
+			before, err = s.makeSchemaSnapshot()
 			if err != nil {
 				return fmt.Errorf("snapshot before up %q: %w", migration, err)
 			}
 		}
-		if err := s.makeUpStep(migration, i); err != nil {
+		if err := s.makeUpStep(migration, step); err != nil {
 			return fmt.Errorf("up step %q: %w", migration, err)
 		}
-		if err := s.makeDownStep(migration, i); err != nil {
+		if err := s.makeDownStep(migration, step); err != nil {
 			return fmt.Errorf("down step %q: %w", migration, err)
 		}
 		if s.testSchema {
-			snapAfter, err := s.makeSchemaSnapshot()
+			after, err := s.makeSchemaSnapshot()
 			if err != nil {
 				return fmt.Errorf("snapshot after down %q: %w", migration, err)
 			}
-			if err := s.compareSchemas(snapBefore, snapAfter); err != nil {
+			if err := s.compareSchemas(before, after); err != nil {
 				return fmt.Errorf("compare up-down %q: %w", migration, err)
 			}
-			log.Printf("schema snapshots are equal for migration %s at step %d", migration, i)
+			log.Printf("schema snapshots are equal for migration %s at step %d", migration, step)
 		}
-		if err := s.makeUpStep(migration, i); err != nil {
+		if err := s.makeUpStep(migration, step); err != nil {
 			return fmt.Errorf("final up step %q: %w", migration, err)
 		}
 	}
