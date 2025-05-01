@@ -15,13 +15,14 @@ import (
 )
 
 type StaircaseCli struct {
-	migrationsPath string
-	testSchema     bool
-	depth          int
-	migrateUp      string
-	migrateDown    string
-	postgresUrl    string
-	dbClient       *driver.PostgresClient
+	migrationsPath string                            // Path to the directory with .sql migration files.
+	testSchema     bool                              // If true, compare schema before and after migration. If false, only run migrations.
+	depth          int                               // Number of steps in the staircase. If 0, all migrations will be used.
+	migrateUp      string                            // Command to run upgrade for single migration.
+	migrateDown    string                            // Command to run downgrade for single migration.
+	postgresUrl    string                            // Connection string for PostgreSQL. For example: "postgres://user:password@localhost:5432/dbname".
+	dbClient       *driver.PostgresClient            // DB client for executing queries.
+	baseline       map[string]*driver.SchemaSnapshot // Etalon snapshots.
 }
 
 func NewStaircaseCli(
@@ -39,6 +40,7 @@ func NewStaircaseCli(
 		migrateUp:      migrateUp,
 		migrateDown:    migrateDown,
 		postgresUrl:    postgresUrl,
+		baseline:       make(map[string]*driver.SchemaSnapshot),
 	}
 }
 
@@ -61,6 +63,7 @@ func (s *StaircaseCli) Run() error {
 	if err := s.processStaircase(migrations); err != nil {
 		return fmt.Errorf("staircase failed: %w", err)
 	}
+	log.Println("🎉 Staircase test completed successfully!")
 	return nil
 }
 
@@ -81,60 +84,79 @@ func (s *StaircaseCli) processStaircase(migrations []string) error {
 func (s *StaircaseCli) actualiseDb(migrations []string) error {
 	for i, migration := range migrations {
 		log.Printf("Running migration %d/%d: %s", i+1, len(migrations), migration)
-		output, err := s.executeCommand(s.migrateUp, migration)
-		if err != nil {
+
+		if out, err := s.executeCommand(s.migrateUp, migration); err != nil {
 			return fmt.Errorf("apply migration %q (step %d): %w", migration, i+1, err)
+		} else {
+			log.Println("Migration output:", out)
 		}
-		log.Println("Migration output:", output)
+
+		// After applying each migration, take an etalon snapshot of the schema
+		if snap, err := s.makeSchemaSnapshot(); err != nil {
+			return fmt.Errorf("snapshot after %q: %w", migration, err)
+		} else {
+			s.baseline[migration] = snap
+		}
 	}
 	return nil
 }
 
 func (s *StaircaseCli) processDownUpDown(migrations []string) error {
 	steps := s.calculateStairDepth(migrations)
+
 	for i := 1; i <= steps; i++ {
 		migration := migrations[len(migrations)-i]
-		var snapBeforeDown, snapAfterFirstDown *driver.SchemaSnapshot
-		if s.testSchema {
-			var err error
-			snapBeforeDown, err = s.makeSchemaSnapshot()
-			if err != nil {
-				return fmt.Errorf("snapshot before first down %q: %w", migration, err)
-			}
+		baseCur, ok := s.baseline[migration]
+		if !ok {
+			return fmt.Errorf("baseline for %q not found", migration)
 		}
+		var basePrev *driver.SchemaSnapshot
+		if idx := len(migrations) - i - 1; idx >= 0 {
+			basePrev = s.baseline[migrations[idx]]
+		}
+
+		// 1) Downgrade
 		if err := s.makeDownStep(migration, i); err != nil {
 			return fmt.Errorf("down step %q: %w", migration, err)
 		}
 		if s.testSchema {
-			var err error
-			snapAfterFirstDown, err = s.makeSchemaSnapshot()
+			snapAfterDown, err := s.makeSchemaSnapshot()
 			if err != nil {
 				return fmt.Errorf("snapshot after first down %q: %w", migration, err)
 			}
+			if basePrev != nil {
+				if err := s.compareSchemas(basePrev, snapAfterDown); err != nil {
+					return fmt.Errorf("compare first down %q with baseline prev: %w", migration, err)
+				}
+			}
 		}
+
+		// 2) Upgrade
 		if err := s.makeUpStep(migration, i); err != nil {
 			return fmt.Errorf("up step %q: %w", migration, err)
 		}
 		if s.testSchema {
-			snapAfterDownUp, err := s.makeSchemaSnapshot()
+			snapAfterUp, err := s.makeSchemaSnapshot()
 			if err != nil {
 				return fmt.Errorf("snapshot after down-up %q: %w", migration, err)
 			}
-			if err := s.compareSchemas(snapBeforeDown, snapAfterDownUp); err != nil {
-				return fmt.Errorf("compare down-up %q: %w", migration, err)
+			if err := s.compareSchemas(baseCur, snapAfterUp); err != nil {
+				return fmt.Errorf("compare down-up %q with baseline cur: %w", migration, err)
 			}
 			log.Printf("Down→Up test passed for %s", migration)
 		}
+
+		// 3) Step down the stairs
 		if err := s.makeDownStep(migration, i); err != nil {
 			return fmt.Errorf("final down step %q: %w", migration, err)
 		}
-		if s.testSchema {
+		if s.testSchema && basePrev != nil {
 			snapAfterFinalDown, err := s.makeSchemaSnapshot()
 			if err != nil {
 				return fmt.Errorf("snapshot after final down %q: %w", migration, err)
 			}
-			if err := s.compareSchemas(snapAfterFirstDown, snapAfterFinalDown); err != nil {
-				return fmt.Errorf("compare final down %q: %w", migration, err)
+			if err := s.compareSchemas(basePrev, snapAfterFinalDown); err != nil {
+				return fmt.Errorf("compare final down %q with baseline prev: %w", migration, err)
 			}
 			log.Printf("Final Down test passed for %s", migration)
 		}
@@ -149,32 +171,48 @@ func (s *StaircaseCli) processUpDownUp(migrations []string) error {
 	log.Printf("Running staircase test with %d steps", steps)
 	for i, migration := range tail {
 		step := i + 1
-		var before *driver.SchemaSnapshot
-		if s.testSchema {
-			var err error
-			before, err = s.makeSchemaSnapshot()
-			if err != nil {
-				return fmt.Errorf("snapshot before up %q: %w", migration, err)
-			}
+
+		baseCur, ok := s.baseline[migration]
+		if !ok {
+			return fmt.Errorf("baseline for %q not found", migration)
 		}
+		var basePrev *driver.SchemaSnapshot
+		if idx := len(migrations) - steps + i - 1; idx >= 0 {
+			basePrev = s.baseline[migrations[idx]]
+		}
+
+		// 1) Upgrade
 		if err := s.makeUpStep(migration, step); err != nil {
 			return fmt.Errorf("up step %q: %w", migration, err)
 		}
+
+		// 2) Downgrade
 		if err := s.makeDownStep(migration, step); err != nil {
 			return fmt.Errorf("down step %q: %w", migration, err)
 		}
-		if s.testSchema {
-			after, err := s.makeSchemaSnapshot()
+		if s.testSchema && basePrev != nil {
+			afterDown, err := s.makeSchemaSnapshot()
 			if err != nil {
 				return fmt.Errorf("snapshot after down %q: %w", migration, err)
 			}
-			if err := s.compareSchemas(before, after); err != nil {
-				return fmt.Errorf("compare up-down %q: %w", migration, err)
+			if err := s.compareSchemas(basePrev, afterDown); err != nil {
+				return fmt.Errorf("compare up-down %q with baseline prev: %w", migration, err)
 			}
-			log.Printf("schema snapshots are equal for migration %s at step %d", migration, step)
+			log.Printf("Schema reverted to baseline for migration %s (step %d)", migration, step)
 		}
+
+		// 3) Step up the stairs
 		if err := s.makeUpStep(migration, step); err != nil {
 			return fmt.Errorf("final up step %q: %w", migration, err)
+		}
+		if s.testSchema {
+			afterFinalUp, err := s.makeSchemaSnapshot()
+			if err != nil {
+				return fmt.Errorf("snapshot after final up %q: %w", migration, err)
+			}
+			if err := s.compareSchemas(baseCur, afterFinalUp); err != nil {
+				return fmt.Errorf("compare final up %q with baseline cur: %w", migration, err)
+			}
 		}
 	}
 	log.Println("Staircase test (up-down-up) completed successfully!")
@@ -671,4 +709,12 @@ func (s *StaircaseCli) compareSchemas(before, after *driver.SchemaSnapshot) erro
 		return fmt.Errorf("schema snapshots differ:\n%s", out)
 	}
 	return nil
+}
+
+func (s *StaircaseCli) baselineFor(migration string) (*driver.SchemaSnapshot, error) {
+	snap, ok := s.baseline[migration]
+	if !ok {
+		return nil, fmt.Errorf("baseline for %q not found", migration)
+	}
+	return snap, nil
 }
