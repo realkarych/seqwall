@@ -98,6 +98,7 @@ func (s *StaircaseCli) actualiseDb(migrations []string) error {
 			s.baseline[migration] = snap
 		}
 	}
+	log.Println("Step 1 (actualise db) completed successfully!")
 	return nil
 }
 
@@ -143,7 +144,6 @@ func (s *StaircaseCli) processDownUpDown(migrations []string) error {
 			if err := s.compareSchemas(baseCur, snapAfterUp); err != nil {
 				return fmt.Errorf("compare down-up %q with baseline cur: %w", migration, err)
 			}
-			log.Printf("Down→Up test passed for %s", migration)
 		}
 
 		// 3) Step down the stairs
@@ -161,6 +161,7 @@ func (s *StaircaseCli) processDownUpDown(migrations []string) error {
 			log.Printf("Final Down test passed for %s", migration)
 		}
 	}
+	log.Println("Step 2 (down-up-down) completed successfully!")
 	return nil
 }
 
@@ -215,7 +216,7 @@ func (s *StaircaseCli) processUpDownUp(migrations []string) error {
 			}
 		}
 	}
-	log.Println("Staircase test (up-down-up) completed successfully!")
+	log.Println("Step 3 (up-down-up) completed successfully!")
 	return nil
 }
 
