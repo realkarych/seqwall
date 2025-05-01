@@ -14,7 +14,7 @@ import (
 	"github.com/realkarych/seqwall/pkg/driver"
 )
 
-type StaircaseCli struct {
+type StaircaseWorker struct {
 	migrationsPath string                            // Path to the directory with .sql migration files.
 	testSchema     bool                              // If true, compare schema before and after migration. If false, only run migrations.
 	depth          int                               // Number of steps in the staircase. If 0, all migrations will be used.
@@ -25,15 +25,15 @@ type StaircaseCli struct {
 	baseline       map[string]*driver.SchemaSnapshot // Etalon snapshots.
 }
 
-func NewStaircaseCli(
+func NewStaircaseWorker(
 	migrationsPath string,
 	testSchema bool,
 	depth int,
 	migrateUp string,
 	migrateDown string,
 	postgresUrl string,
-) *StaircaseCli {
-	return &StaircaseCli{
+) *StaircaseWorker {
+	return &StaircaseWorker{
 		migrationsPath: migrationsPath,
 		testSchema:     testSchema,
 		depth:          depth,
@@ -44,7 +44,7 @@ func NewStaircaseCli(
 	}
 }
 
-func (s *StaircaseCli) Run() error {
+func (s *StaircaseWorker) Run() error {
 	client, err := driver.NewPostgresClient(s.postgresUrl)
 	if err != nil {
 		return fmt.Errorf("connect postgres: %w", err)
@@ -67,7 +67,7 @@ func (s *StaircaseCli) Run() error {
 	return nil
 }
 
-func (s *StaircaseCli) processStaircase(migrations []string) error {
+func (s *StaircaseWorker) processStaircase(migrations []string) error {
 	log.Println("Step 1: DB actualisation – migrating all migrations up…")
 	if err := s.actualiseDb(migrations); err != nil {
 		return fmt.Errorf("actualise db: %w", err)
@@ -81,7 +81,7 @@ func (s *StaircaseCli) processStaircase(migrations []string) error {
 	return nil
 }
 
-func (s *StaircaseCli) actualiseDb(migrations []string) error {
+func (s *StaircaseWorker) actualiseDb(migrations []string) error {
 	for i, migration := range migrations {
 		log.Printf("Running migration %d/%d: %s", i+1, len(migrations), migration)
 
@@ -102,7 +102,7 @@ func (s *StaircaseCli) actualiseDb(migrations []string) error {
 	return nil
 }
 
-func (s *StaircaseCli) processDownUpDown(migrations []string) error {
+func (s *StaircaseWorker) processDownUpDown(migrations []string) error {
 	steps := s.calculateStairDepth(migrations)
 
 	for i := 1; i <= steps; i++ {
@@ -165,7 +165,7 @@ func (s *StaircaseCli) processDownUpDown(migrations []string) error {
 	return nil
 }
 
-func (s *StaircaseCli) processUpDownUp(migrations []string) error {
+func (s *StaircaseWorker) processUpDownUp(migrations []string) error {
 	log.Println("Step 3: Run staircase test (up-down-up)...")
 	steps := s.calculateStairDepth(migrations)
 	tail := migrations[len(migrations)-steps:]
@@ -220,7 +220,7 @@ func (s *StaircaseCli) processUpDownUp(migrations []string) error {
 	return nil
 }
 
-func (s *StaircaseCli) makeUpStep(migration string, step int) error {
+func (s *StaircaseWorker) makeUpStep(migration string, step int) error {
 	log.Printf("Applying migration %s (step %d)", migration, step)
 	output, err := s.executeCommand(s.migrateUp, migration)
 	if err != nil {
@@ -230,7 +230,7 @@ func (s *StaircaseCli) makeUpStep(migration string, step int) error {
 	return nil
 }
 
-func (s *StaircaseCli) makeDownStep(migration string, step int) error {
+func (s *StaircaseWorker) makeDownStep(migration string, step int) error {
 	log.Printf("Reverting migration %s (step %d)", migration, step)
 	output, err := s.executeCommand(s.migrateDown, migration)
 	if err != nil {
@@ -240,7 +240,7 @@ func (s *StaircaseCli) makeDownStep(migration string, step int) error {
 	return nil
 }
 
-func (s *StaircaseCli) executeCommand(command, migration string) (string, error) {
+func (s *StaircaseWorker) executeCommand(command, migration string) (string, error) {
 	command = strings.Replace(command, CurrentMigrationPlaceholder, migration, -1)
 	cmd := exec.Command("sh", "-c", command)
 	output, err := cmd.CombinedOutput()
@@ -251,7 +251,7 @@ func (s *StaircaseCli) executeCommand(command, migration string) (string, error)
 	return string(output), err
 }
 
-func (s *StaircaseCli) calculateStairDepth(migrations []string) int {
+func (s *StaircaseWorker) calculateStairDepth(migrations []string) int {
 	steps := len(migrations)
 	if s.depth > 0 && s.depth < steps {
 		steps = s.depth
@@ -259,7 +259,7 @@ func (s *StaircaseCli) calculateStairDepth(migrations []string) int {
 	return steps
 }
 
-func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
+func (s *StaircaseWorker) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 	snapshot := &driver.SchemaSnapshot{
 		Tables:      make(map[string]driver.TableDefinition),
 		Views:       make(map[string]driver.ViewDefinition),
@@ -280,7 +280,7 @@ func (s *StaircaseCli) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 	return snapshot, nil
 }
 
-func (s *StaircaseCli) scanColumns(snapshot *driver.SchemaSnapshot) error {
+func (s *StaircaseWorker) scanColumns(snapshot *driver.SchemaSnapshot) error {
 	const columnsQuery = `
         SELECT
             table_name,
@@ -365,7 +365,7 @@ func (s *StaircaseCli) scanColumns(snapshot *driver.SchemaSnapshot) error {
 	return nil
 }
 
-func (s *StaircaseCli) scanViews(snapshot *driver.SchemaSnapshot) error {
+func (s *StaircaseWorker) scanViews(snapshot *driver.SchemaSnapshot) error {
 	const viewsQuery = `
         SELECT
             viewname AS table_name,
@@ -391,7 +391,7 @@ func (s *StaircaseCli) scanViews(snapshot *driver.SchemaSnapshot) error {
 	return nil
 }
 
-func (s *StaircaseCli) scanIndexes(snapshot *driver.SchemaSnapshot) error {
+func (s *StaircaseWorker) scanIndexes(snapshot *driver.SchemaSnapshot) error {
 	const indexesQuery = `
         SELECT indexname, indexdef
         FROM pg_indexes
@@ -415,7 +415,7 @@ func (s *StaircaseCli) scanIndexes(snapshot *driver.SchemaSnapshot) error {
 	return nil
 }
 
-func (s *StaircaseCli) scanConstraints(snapshot *driver.SchemaSnapshot) error {
+func (s *StaircaseWorker) scanConstraints(snapshot *driver.SchemaSnapshot) error {
 	const constraintsQuery = `
         SELECT
             tc.constraint_name,
@@ -457,7 +457,7 @@ func (s *StaircaseCli) scanConstraints(snapshot *driver.SchemaSnapshot) error {
 	return nil
 }
 
-func (s *StaircaseCli) scanEnums(snapshot *driver.SchemaSnapshot) error {
+func (s *StaircaseWorker) scanEnums(snapshot *driver.SchemaSnapshot) error {
 	const enumQuery = `
         SELECT
             t.typname,
@@ -486,7 +486,7 @@ func (s *StaircaseCli) scanEnums(snapshot *driver.SchemaSnapshot) error {
 	return nil
 }
 
-func (s *StaircaseCli) scanFks(snapshot *driver.SchemaSnapshot) error {
+func (s *StaircaseWorker) scanFks(snapshot *driver.SchemaSnapshot) error {
 	const foreignKeysQuery = `
         SELECT
             tc.constraint_name,
@@ -541,7 +541,7 @@ func (s *StaircaseCli) scanFks(snapshot *driver.SchemaSnapshot) error {
 	return nil
 }
 
-func (s *StaircaseCli) scanTriggers(snapshot *driver.SchemaSnapshot) error {
+func (s *StaircaseWorker) scanTriggers(snapshot *driver.SchemaSnapshot) error {
 	const triggersQuery = `
 		SELECT
 			trigger_name,
@@ -589,7 +589,7 @@ func (s *StaircaseCli) scanTriggers(snapshot *driver.SchemaSnapshot) error {
 	return nil
 }
 
-func (s *StaircaseCli) scanFunctions(snapshot *driver.SchemaSnapshot) error {
+func (s *StaircaseWorker) scanFunctions(snapshot *driver.SchemaSnapshot) error {
 	const q = `
 		SELECT routine_name, routine_type, data_type, routine_definition
 		FROM information_schema.routines
@@ -622,7 +622,7 @@ func (s *StaircaseCli) scanFunctions(snapshot *driver.SchemaSnapshot) error {
 	return nil
 }
 
-func (s *StaircaseCli) scanSeqs(snapshot *driver.SchemaSnapshot) error {
+func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 	const q = `
 		SELECT sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
 		FROM information_schema.sequences
@@ -662,7 +662,7 @@ func (s *StaircaseCli) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 	return nil
 }
 
-func (s *StaircaseCli) compareSchemas(before, after *driver.SchemaSnapshot) error {
+func (s *StaircaseWorker) compareSchemas(before, after *driver.SchemaSnapshot) error {
 	normalize := func(src map[string]driver.ConstraintDefinition) map[string]driver.ConstraintDefinition {
 		res := make(map[string]driver.ConstraintDefinition)
 		re := regexp.MustCompile(`^([A-Za-z0-9_]+)\s+IS\s+NOT\s+NULL$`)
@@ -712,7 +712,7 @@ func (s *StaircaseCli) compareSchemas(before, after *driver.SchemaSnapshot) erro
 	return nil
 }
 
-func (s *StaircaseCli) baselineFor(migration string) (*driver.SchemaSnapshot, error) {
+func (s *StaircaseWorker) baselineFor(migration string) (*driver.SchemaSnapshot, error) {
 	snap, ok := s.baseline[migration]
 	if !ok {
 		return nil, fmt.Errorf("baseline for %q not found", migration)

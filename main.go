@@ -65,7 +65,7 @@ func newStaircaseCmd() *cobra.Command {
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			cli := seqwall.NewStaircaseCli(
+			worker := seqwall.NewStaircaseWorker(
 				migrationsPath,
 				testSchema,
 				depth,
@@ -73,7 +73,7 @@ func newStaircaseCmd() *cobra.Command {
 				migrateDown,
 				postgresURL,
 			)
-			return cli.Run()
+			return worker.Run()
 		},
 	}
 
