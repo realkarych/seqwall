@@ -132,3 +132,25 @@ No — databases involve a spectrum of concerns, and a complete testing strategy
 - ...
 
 Seqwall focuses on **schema-level structural correctness** — nothing more, nothing less.
+
+## <p align="center">🙏 Contribution</p>
+
+### Found a bug?
+
+- Please [open an issue](https://github.com/realkarych/seqwall/issues/new?template=bug.md) with a clear description, reproduction steps (if possible), and expected vs. actual behavior.
+
+### Have a question?
+
+- Please [open a discussion](https://github.com/realkarych/seqwall/discussions/categories/q-a) in QA section. Or feel free to message me on Telegram: [`@karych`](https://t.me/karych).
+
+### Want to suggest a feature?
+
+- If you have a concrete and well-scoped idea — feel free to [open a feature request](https://github.com/realkarych/seqwall/issues/new?template=feature_request.md).  
+- If the idea is more exploratory — start a [discussion](https://github.com/realkarych/seqwall/discussions/categories/ideas) instead.
+
+### Ready to contribute code?  
+
+- Look for issues marked with `help wanted` or `good first issue`. _In fact, you can pick any issue without Assignees_.
+- Fork the repo, create a branch, and open a pull request when ready (and tag `@realkarych` for review).
+
+Your feedback and contributions are always welcome 💙
