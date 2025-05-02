@@ -8,4 +8,37 @@
 
 <hr>
 
-## <p align=center>In develop...</p>
+## <p align=center>Installation</p>
+
+### Homebrew (macOS & Linux)
+
+```bash
+brew tap realkarych/tap
+brew install seqwall        # first install
+brew upgrade seqwall        # later updates
+```
+
+### Debian / Ubuntu (APT)
+
+```bash
+# Import the GPG key
+curl -fsSL https://realkarych.github.io/seqwall-apt/public.key \
+  | sudo tee /etc/apt/trusted.gpg.d/seqwall.asc
+
+# Add the repository
+echo "deb [arch=$(dpkg --print-architecture)] \
+  https://realkarych.github.io/seqwall-apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/seqwall.list
+
+# Install / update
+sudo apt update
+sudo apt install seqwall          # first install
+sudo apt upgrade  seqwall         # later updates
+```
+
+### Go install (Go ≥ 1.17)
+
+```bash
+go install github.com/realkarych/seqwall@latest
+# make sure $GOBIN (default ~/go/bin) is on your PATH
+```
