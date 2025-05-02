@@ -42,3 +42,7 @@ sudo apt upgrade  seqwall         # later updates
 go install github.com/realkarych/seqwall@latest
 # make sure $GOBIN (default ~/go/bin) is on your PATH
 ```
+
+### Other distros / Windows
+
+Download the pre‑built archive from the **[Releases](https://github.com/realkarych/seqwall/releases)** page, unpack, add the binary to your `PATH`. | On Windows, you may need `Unblock-File .\seqwall.exe` before first run.
