@@ -4,11 +4,11 @@
 </p>
 </a>
 
-*<p align=center><a href="https://github.com/realkarych/seqwall">Seqwall</a> is a tool for PostgreSQL migrations testing</p>*
+*<p align=center><a href="https://github.com/realkarych/seqwall">Seqwall</a> is a tool for PostgreSQL migrations testing. Ensure that every migration is reversible, idempotent, compatible with others in sequence, structurally sound and verifiable.</p>*
 
 <hr>
 
-## <p align=center>Installation</p>
+## <p align=center>📦 Installation</p>
 
 ### Homebrew (macOS & Linux)
 
@@ -36,6 +36,12 @@ sudo apt install seqwall          # first install
 sudo apt upgrade  seqwall         # later updates
 ```
 
+### Other distros / Windows
+
+Download the pre‑built archive from the **[Releases](https://github.com/realkarych/seqwall/releases)** page, unpack, add the binary to your `PATH`. 
+
+> On Windows, you may need `Unblock-File .\seqwall.exe` before first run.
+
 ### Go install (Go ≥ 1.17)
 
 ```bash
@@ -43,6 +49,86 @@ go install github.com/realkarych/seqwall@latest
 # make sure $GOBIN (default ~/go/bin) is on your PATH
 ```
 
-### Other distros / Windows
+<hr>
 
-Download the pre‑built archive from the **[Releases](https://github.com/realkarych/seqwall/releases)** page, unpack, add the binary to your `PATH`. | On Windows, you may need `Unblock-File .\seqwall.exe` before first run.
+### ✅ Once installed, verify it works
+
+```
+❯ seqwall staircase --help
+Launch staircase testing
+
+Usage:
+  seqwall staircase [flags]
+
+Flags:
+      --postgres-url string           PostgreSQL URL (required or fallback: $DATABASE_URL environment variable)
+      --migrations-path string        Path to migrations. Migrations must be in lexicographical order (required)
+      --upgrade string                Shell command that applies next migration (required)
+      --downgrade string              Shell command that reverts current migration (required)
+      --migrations-extension string   Extension of migration files (default: .sql)
+      --schema stringArray            Schemas to test (default [public])
+      --test-snapshots                Compare schema snapshots. If false, only checks fact that migrations are applied / reverted with no errors (default true)
+      --depth int                     Depth of staircase testing (0 = all)
+      --help                          help for staircase
+```
+
+<hr>
+
+## <p align=center>🧬 Methodology & core principles</p>
+
+### Migrations are contracts
+
+Each migration must be reversible and must not break the schema if applied, reverted, and reapplied.
+
+### Snapshots reveal the truth
+
+After each migration, Seqwall captures the schema using **`information_schema` views**,
+adhering to the **<a href="https://www.iso.org/standard/76583.html">ISO/IEC 9075</a> SQL standard**.
+
+This includes _tables_, _columns_, _constraints_, _indexes_, _views_, _triggers_, _functions_, _enums_, _sequences_, and _foreign keys_.
+The snapshots are then compared using structured diffs, allowing detection of even subtle schema differences or mismatches.
+
+### `Staircase` testing guarantees _schema_ consistency
+
+We use a 3-phase strategy:
+1. **`actualize`** — applying all migrations and captures _etalon_ schema snapshot for each migration.
+2. **`down → up → down`** — starting from the latest migration, step backwards:
+   - downgrade one migration,
+   - upgrade it again,
+   - then downgrade once more (down step).
+   - At each step, the schema is compared with previously captured _etalon_ snapshots — both before and after — ensuring reversibility and no drift.
+
+3. **`up → down → up`** — starting from the lower point reached in step 2 (after several rollbacks):
+   - re-apply each migration one by one,
+   - after each, immediately downgrade it,
+   - then re-apply again (up step).
+
+This ensures that the migration chain is robust in both directions, even when recovering from mid-chain downgrades.
+
+### Standalone by design
+
+Seqwall is a single-purpose CLI tool — it requires no server, no daemon, no embedded framework, and no special runtime.
+
+You can run it locally or in CI/CD (recommended), with just your migrations and a database connection string.
+No vendor lock-in, no config-files, no dependencies beyond PostgreSQL.
+
+### Test migrations as they really run
+
+Seqwall runs your actual migration scripts and commands — no wrapper DSLs, no abstractions, no mocks.
+
+You bring your own migration runner (`dbmate`, `alembic`, `goose`, `sqlx`, `atlas`, etc.).
+Seqwall just executes shell commands.
+
+### Limitations & Scope
+
+Does this mean Seqwall is the only tool you need for testing migrations?
+
+No — databases involve a spectrum of concerns, and a complete testing strategy should include:
+- Load testing — to observe performance & regressions
+- Lock behavior analysis — to catch deadlocks and blocking issues
+- Data state testing — to ensure data survives or transforms as expected
+- Static analysis — to catch anti-patterns or unsafe operations before runtime
+- Integration tests — to validate application logic against migrated schemas
+- ...
+
+Seqwall focuses on **schema-level structural correctness** — nothing more, nothing less.
