@@ -124,7 +124,7 @@ jobs:
           mkdir -p tap/Formula
           cat > tap/Formula/seqwall.rb <<EOF
           class Seqwall < Formula
-            desc "Sequential firewall for TCP/UDP sequences"
+            desc "Testing tool for PostgreSQL migrations"
             homepage "https://github.com/realkarych/seqwall"
             version "${TAG}"
 
@@ -202,7 +202,7 @@ jobs:
                 --name seqwall \
                 --version "${VER#v}" \
                 --architecture "$arch" \
-                --description "Sequential firewall for TCP/UDP sequences" \
+                --description "Testing tool for PostgreSQL migrations" \
                 --license MIT \
                 --url "https://github.com/realkarych/seqwall" \
                 "$bin=/usr/bin/seqwall"
