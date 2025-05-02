@@ -156,3 +156,86 @@ jobs:
           git add Formula/seqwall.rb
           git commit -m "seqwall ${TAG}" || echo "Nothing to commit"
           git push origin HEAD:${{ steps.tapinfo.outputs.BRANCH }}
+
+  update-apt:
+    needs: build-and-publish
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '') ||
+      startsWith(github.ref, 'refs/tags/')
+
+    env:
+      TAG: ${{ needs.build-and-publish.outputs.tag }}
+      VER: ${{ needs.build-and-publish.outputs.tag }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev gnupg2 aptly rsync
+          sudo gem install --no-document fpm
+
+      - name: Download linux artifacts
+        run: |
+          mkdir -p dl
+          gh release download "$TAG" -R realkarych/seqwall \
+            -D dl -p "${TAG}_seqwall_linux_*.tar.gz"
+
+      - name: Extract binaries
+        run: |
+          mkdir -p deb-src
+          for tgz in dl/*.tar.gz; do
+            arch=$(echo "$tgz" | sed -E 's/.*_linux_([a-z0-9]+)\.tar\.gz/\1/')
+            tar -xOzf "$tgz" > "deb-src/seqwall_${arch}"
+            chmod +x "deb-src/seqwall_${arch}"
+          done
+
+      - name: Build .deb packages
+        run: |
+          mkdir -p deb
+          cd deb-src
+          for bin in seqwall_*; do
+            arch=${bin##*_}
+            fpm -s dir -t deb \
+                -p "../deb/seqwall_${VER#v}_${arch}.deb" \
+                --name seqwall \
+                --version "${VER#v}" \
+                --architecture "$arch" \
+                --description "Sequential firewall for TCP/UDP sequences" \
+                --license MIT \
+                --url "https://github.com/realkarych/seqwall" \
+                "$bin=/usr/bin/seqwall"
+          done
+
+      - name: Import GPG
+        env:
+          GPG_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: echo "$GPG_KEY" | gpg --batch --import
+
+      - name: Checkout APT pages
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: realkarych/seqwall-apt
+          token: ${{ secrets.DEB_TOKEN }}
+          path: apt
+          ref: gh-pages
+
+      - name: Publish repo
+        run: |
+          cd apt
+          aptly repo create -distribution=stable -component=main seqwall || true
+          aptly repo add seqwall ../deb/*.deb
+          KEYID=$(gpg --list-keys --with-colons | awk -F: '/^pub/ {print $5; exit}')
+          aptly publish repo -architectures="amd64,arm64" -gpg-key="$KEYID" seqwall
+          cp -r ~/.aptly/public/* .
+          rm -rf ~/.aptly
+
+      - name: Commit & push APT repo
+        run: |
+          cd apt
+          git config user.name github-actions
+          git config user.email noreply@github.com
+          git add .
+          git commit -m "APT release ${TAG}" || echo "no changes"
+          git push origin HEAD:gh-pages
