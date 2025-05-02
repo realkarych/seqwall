@@ -1,0 +1,64 @@
+name: Bug Report
+description: Report something that doesn't work as expected
+title: "[Bug] "
+labels: [bug]
+assignees: []
+
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Clearly describe the bug.
+      placeholder: Describe the problem and how you noticed it
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce the issue?
+      placeholder: |
+        1. Run `...`
+        2. Use this migration `...`
+        3. See error `...`
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs/output
+      description: Paste output from console if available
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: pg_version
+    attributes:
+      label: PostgreSQL version
+      description: PostgreSQL version used
+      render: shell
+    validations:
+      required: false
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: false

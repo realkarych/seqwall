@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 Ask a question
+    url: https://github.com/realkarych/seqwall/discussions/categories/q-a
+    about: Ask questions or get help in the Discussions section
+  - name: 💡 Propose an idea
+    url: https://github.com/realkarych/seqwall/discussions/categories/ideas
+    about: Use discussions for early ideas and exploratory feature requests
