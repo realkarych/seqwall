@@ -4,7 +4,7 @@
 </p>
 </a>
 
-*<p align=center><a href="https://github.com/realkarych/seqwall">Seqwall</a> is a tool for Postgres migrations testing</p>*
+*<p align=center><a href="https://github.com/realkarych/seqwall">Seqwall</a> is a tool for PostgreSQL migrations testing</p>*
 
 <hr>
 
