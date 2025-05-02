@@ -5,6 +5,10 @@ on:
     tags:
       - 'v*.*.*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'SemVer tag to release (e.g. v0.0.8)'
+        required: true
 
 permissions:
   contents: write
@@ -12,6 +16,8 @@ permissions:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.TAG }}
     strategy:
       matrix:
         goos: [linux, darwin, windows]
@@ -28,7 +34,12 @@ jobs:
 
       - name: Extract tag
         id: tag
-        run: echo "TAG=${GITHUB_REF#refs/tags/}" >>"$GITHUB_OUTPUT"
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "TAG=${{ github.event.inputs.tag }}" >>"$GITHUB_OUTPUT"
+          else
+            echo "TAG=${GITHUB_REF#refs/tags/}" >>"$GITHUB_OUTPUT"
+          fi
 
       - name: Build binary
         env:
@@ -66,3 +77,82 @@ jobs:
           fail_on_unmatched_files: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  update-homebrew:
+    needs: build-and-publish
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '') ||
+      startsWith(github.ref, 'refs/tags/')
+
+    env:
+      TAG: ${{ needs.build-and-publish.outputs.tag }}
+      TAP_REPO: realkarych/homebrew-tap
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Get tap default branch
+        id: tapinfo
+        run: |
+          branch=$(gh repo view "$TAP_REPO" --json defaultBranchRef -q .defaultBranchRef.name)
+          echo "BRANCH=$branch" >>"$GITHUB_OUTPUT"
+
+      - name: Checkout tap
+        uses: actions/checkout@v4.2.2
+        with:
+          repository: ${{ env.TAP_REPO }}
+          token: ${{ secrets.HOMEBREW_TOKEN }}
+          path: tap
+          ref: ${{ steps.tapinfo.outputs.BRANCH }}
+
+      - name: Download macOS archives
+        run: |
+          mkdir -p dl
+          gh release download "$TAG" -R realkarych/seqwall -D dl -p "${TAG}_seqwall_darwin_amd64.tar.gz"
+          gh release download "$TAG" -R realkarych/seqwall -D dl -p "${TAG}_seqwall_darwin_arm64.tar.gz"
+
+      - name: Calculate SHA256
+        id: shas
+        run: |
+          AMD=$(sha256sum dl/*darwin_amd64.tar.gz | cut -d' ' -f1)
+          ARM=$(sha256sum dl/*darwin_arm64.tar.gz | cut -d' ' -f1)
+          echo "AMD=$AMD" >>"$GITHUB_OUTPUT"
+          echo "ARM=$ARM" >>"$GITHUB_OUTPUT"
+
+      - name: Update formula
+        run: |
+          mkdir -p tap/Formula
+          cat > tap/Formula/seqwall.rb <<EOF
+          class Seqwall < Formula
+            desc "Sequential firewall for TCP/UDP sequences"
+            homepage "https://github.com/realkarych/seqwall"
+            version "${TAG}"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/realkarych/seqwall/releases/download/${TAG}/${TAG}_seqwall_darwin_arm64.tar.gz"
+                sha256 "${{ steps.shas.outputs.ARM }}"
+              else
+                url "https://github.com/realkarych/seqwall/releases/download/${TAG}/${TAG}_seqwall_darwin_amd64.tar.gz"
+                sha256 "${{ steps.shas.outputs.AMD }}"
+              end
+            end
+
+            def install
+              bin.install "seqwall"
+            end
+
+            test do
+              system "#{bin}/seqwall", "--version"
+            end
+          end
+          EOF
+
+      - name: Commit and push formula
+        run: |
+          cd tap
+          git config user.name github-actions
+          git config user.email noreply@github.com
+          git add Formula/seqwall.rb
+          git commit -m "seqwall ${TAG}" || echo "Nothing to commit"
+          git push origin HEAD:${{ steps.tapinfo.outputs.BRANCH }}
