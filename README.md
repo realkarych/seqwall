@@ -38,7 +38,7 @@ sudo apt upgrade  seqwall         # later updates
 
 ### Other distros / Windows
 
-Download the pre‑built archive from the **[Releases](https://github.com/realkarych/seqwall/releases)** page, unpack, add the binary to your `PATH`. 
+Download the pre‑built archive from the **[Releases](https://github.com/realkarych/seqwall/releases)** page, unpack, add the binary to your `PATH`.
 
 > On Windows, you may need `Unblock-File .\seqwall.exe` before first run.
 
@@ -137,7 +137,7 @@ Seqwall focuses on **schema-level structural correctness** — nothing more, not
 
 ### Found a bug?
 
-- Please [open an issue](https://github.com/realkarych/seqwall/issues/new?template=bug.md) with a clear description, reproduction steps (if possible), and expected vs. actual behavior.
+- Please [open an issue](https://github.com/realkarych/seqwall/issues/new?template=bug.yml) with a clear description, reproduction steps (if possible), and expected vs. actual behavior.
 
 ### Have a question?
 
@@ -145,10 +145,10 @@ Seqwall focuses on **schema-level structural correctness** — nothing more, not
 
 ### Want to suggest a feature?
 
-- If you have a concrete and well-scoped idea — feel free to [open a feature request](https://github.com/realkarych/seqwall/issues/new?template=feature_request.md).  
+- If you have a concrete and well-scoped idea — feel free to [open a feature request](https://github.com/realkarych/seqwall/issues/new?template=feature_request.yml).
 - If the idea is more exploratory — start a [discussion](https://github.com/realkarych/seqwall/discussions/categories/ideas) instead.
 
-### Ready to contribute code?  
+### Ready to contribute code?
 
 - Look for issues marked with `help wanted` or `good first issue`. _In fact, you can pick any issue without Assignees_.
 - Fork the repo, create a branch, and open a pull request when ready (and tag `@realkarych` for review).
