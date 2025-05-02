@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func loadMigrations(migrationsPath string) ([]string, error) {
+func loadMigrations(migrationsPath, extension string) ([]string, error) {
 	var migrationFiles []string
 	entries, err := os.ReadDir(migrationsPath)
 	if err != nil {
@@ -19,14 +19,14 @@ func loadMigrations(migrationsPath string) ([]string, error) {
 		if entry.IsDir() {
 			continue
 		}
-		if strings.HasSuffix(entry.Name(), ".sql") {
+		if strings.HasSuffix(entry.Name(), extension) {
 			fullPath := filepath.Join(migrationsPath, entry.Name())
 			migrationFiles = append(migrationFiles, fullPath)
 		}
 	}
 
 	if len(migrationFiles) == 0 {
-		return migrationFiles, fmt.Errorf("no .sql migration files found in directory %s", migrationsPath)
+		return migrationFiles, fmt.Errorf("no %s migration files found in directory %s", extension, migrationsPath)
 	}
 
 	sort.Strings(migrationFiles)

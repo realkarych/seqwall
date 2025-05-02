@@ -22,6 +22,7 @@ var (
 	downgradeCmd           string
 	postgresURL            string
 	schemas                []string
+	migrationsExtension    string
 )
 
 func main() {
@@ -74,18 +75,60 @@ func newStaircaseCmd() *cobra.Command {
 				downgradeCmd,
 				postgresURL,
 				schemas,
+				migrationsExtension,
 			)
 			return worker.Run()
 		},
 	}
 
-	cmd.Flags().StringVar(&postgresURL, "postgres-url", "", "PostgreSQL URL (fallback: $DATABASE_URL)")
-	cmd.Flags().StringVar(&migrationsPath, "migrations-path", "", "Path to migrations (required). Migrations must be in lexicographical order")
-	cmd.Flags().StringVar(&upgradeCmd, "upgrade", "", "Shell command that applies next migration (required)")
-	cmd.Flags().StringVar(&downgradeCmd, "downgrade", "", "Shell command that reverts current migration (required)")
-	cmd.Flags().BoolVar(&compareSchemaSnapshots, "test-snapshots", true, "Compare schema snapshots (default true)")
-	cmd.Flags().StringArrayVar(&schemas, "schema", []string{"public"}, "Schemas to test (default: public)")
-	cmd.Flags().IntVar(&depth, "depth", 0, "Depth of staircase testing (0 = all)")
+	cmd.Flags().StringVar(
+		&postgresURL,
+		"postgres-url",
+		"",
+		"PostgreSQL URL (fallback: $DATABASE_URL)",
+	)
+	cmd.Flags().StringVar(
+		&migrationsPath,
+		"migrations-path",
+		"",
+		"Path to migrations (required). Migrations must be in lexicographical order",
+	)
+	cmd.Flags().StringVar(
+		&upgradeCmd,
+		"upgrade",
+		"",
+		"Shell command that applies next migration (required)",
+	)
+	cmd.Flags().StringVar(
+		&downgradeCmd,
+		"downgrade",
+		"",
+		"Shell command that reverts current migration (required)",
+	)
+	cmd.Flags().BoolVar(
+		&compareSchemaSnapshots,
+		"test-snapshots",
+		true,
+		"Compare schema snapshots (default true). If false, only checks fact that migrations are applied / reverted with no errors",
+	)
+	cmd.Flags().StringArrayVar(
+		&schemas,
+		"schema",
+		[]string{"public"},
+		"Schemas to test (default: public)",
+	)
+	cmd.Flags().IntVar(
+		&depth,
+		"depth",
+		0,
+		"Depth of staircase testing (0 = all)",
+	)
+	cmd.Flags().StringVar(
+		&migrationsExtension,
+		"migrations-extension",
+		".sql",
+		"Extension of migration files (default: .sql)",
+	)
 
 	_ = cmd.MarkFlagRequired("migrations-path")
 	_ = cmd.MarkFlagRequired("upgrade")

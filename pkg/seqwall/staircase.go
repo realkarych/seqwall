@@ -15,15 +15,16 @@ import (
 )
 
 type StaircaseWorker struct {
-	migrationsPath         string                            // Path to the directory with .sql migration files.
+	migrationsPath         string                            // Path to the directory with migration files.
 	compareSchemaSnapshots bool                              // If true, compare schema before and after migration. If false, only run migrations.
-	depth                  int                               // Number of steps in the staircase. If 0, all migrations will be used.
+	depth                  int                               // Number of steps in the staircase. If 0, all migrations will be processed.
 	upgradeCmd             string                            // Command to run upgrade for single migration.
 	downgradeCmd           string                            // Command to run downgrade for single migration.
 	postgresUrl            string                            // Connection string for PostgreSQL. For example: "postgres://user:password@localhost:5432/dbname".
 	dbClient               *driver.PostgresClient            // DB client for executing queries.
 	baseline               map[string]*driver.SchemaSnapshot // Etalon snapshots.
 	schemas                []string                          // List of schemas to be processed.
+	migrationsExtension    string                            // Extension for migration files.
 }
 
 func NewStaircaseWorker(
@@ -34,6 +35,7 @@ func NewStaircaseWorker(
 	downgradeCmd string,
 	postgresUrl string,
 	schemas []string,
+	migrationsExtension string,
 ) *StaircaseWorker {
 	return &StaircaseWorker{
 		migrationsPath:         migrationsPath,
@@ -44,6 +46,7 @@ func NewStaircaseWorker(
 		postgresUrl:            postgresUrl,
 		baseline:               make(map[string]*driver.SchemaSnapshot),
 		schemas:                schemas,
+		migrationsExtension:    migrationsExtension,
 	}
 }
 
@@ -54,7 +57,7 @@ func (s *StaircaseWorker) Run() error {
 	}
 	s.dbClient = client
 	defer s.dbClient.Close()
-	migrations, err := loadMigrations(s.migrationsPath)
+	migrations, err := loadMigrations(s.migrationsPath, s.migrationsExtension)
 	if err != nil {
 		return fmt.Errorf("load migrations: %w", err)
 	}
@@ -66,7 +69,7 @@ func (s *StaircaseWorker) Run() error {
 	if err := s.processStaircase(migrations); err != nil {
 		return fmt.Errorf("staircase failed: %w", err)
 	}
-	log.Println("🎉 Staircase test completed successfully!")
+	log.Println("\n🎉 Staircase test completed successfully!")
 	return nil
 }
 
