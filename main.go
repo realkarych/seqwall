@@ -15,12 +15,13 @@ const (
 )
 
 var (
-	migrationsPath string
-	testSchema     bool
-	depth          int
-	migrateUp      string
-	migrateDown    string
-	postgresURL    string
+	migrationsPath         string
+	compareSchemaSnapshots bool
+	depth                  int
+	upgradeCmd             string
+	downgradeCmd           string
+	postgresURL            string
+	schemas                []string
 )
 
 func main() {
@@ -54,7 +55,7 @@ func newStaircaseCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "staircase",
 		Short: "Launch staircase testing",
-		Long:  "Launch staircase testing to check schema consistency. Migrations must be in lexicographical order.",
+		Long:  "Launch staircase testing",
 		PreRunE: func(cmd *cobra.Command, _ []string) error {
 			if postgresURL == "" {
 				postgresURL = os.Getenv("DATABASE_URL")
@@ -67,26 +68,28 @@ func newStaircaseCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			worker := seqwall.NewStaircaseWorker(
 				migrationsPath,
-				testSchema,
+				compareSchemaSnapshots,
 				depth,
-				migrateUp,
-				migrateDown,
+				upgradeCmd,
+				downgradeCmd,
 				postgresURL,
+				schemas,
 			)
 			return worker.Run()
 		},
 	}
 
-	cmd.Flags().StringVarP(&migrationsPath, "migrations", "m", "", "Path to migrations (required)")
-	cmd.Flags().BoolVar(&testSchema, "test-schema", true, "Compare schema snapshots (default true)")
-	cmd.Flags().IntVarP(&depth, "depth", "d", 0, "Depth of staircase testing (0 = all)")
-	cmd.Flags().StringVar(&migrateUp, "migrate-up", "", "Shell command that applies a migration (required)")
-	cmd.Flags().StringVar(&migrateDown, "migrate-down", "", "Shell command that reverts a migration (required)")
 	cmd.Flags().StringVar(&postgresURL, "postgres-url", "", "PostgreSQL URL (fallback: $DATABASE_URL)")
+	cmd.Flags().StringVar(&migrationsPath, "migrations-path", "", "Path to migrations (required). Migrations must be in lexicographical order")
+	cmd.Flags().StringVar(&upgradeCmd, "upgrade", "", "Shell command that applies next migration (required)")
+	cmd.Flags().StringVar(&downgradeCmd, "downgrade", "", "Shell command that reverts current migration (required)")
+	cmd.Flags().BoolVar(&compareSchemaSnapshots, "test-snapshots", true, "Compare schema snapshots (default true)")
+	cmd.Flags().StringArrayVar(&schemas, "schema", []string{"public"}, "Schemas to test (default: public)")
+	cmd.Flags().IntVar(&depth, "depth", 0, "Depth of staircase testing (0 = all)")
 
-	_ = cmd.MarkFlagRequired("migrations")
-	_ = cmd.MarkFlagRequired("migrate-up")
-	_ = cmd.MarkFlagRequired("migrate-down")
+	_ = cmd.MarkFlagRequired("migrations-path")
+	_ = cmd.MarkFlagRequired("upgrade")
+	_ = cmd.MarkFlagRequired("downgrade")
 
 	return cmd
 }

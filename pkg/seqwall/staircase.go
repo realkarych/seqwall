@@ -15,32 +15,35 @@ import (
 )
 
 type StaircaseWorker struct {
-	migrationsPath string                            // Path to the directory with .sql migration files.
-	testSchema     bool                              // If true, compare schema before and after migration. If false, only run migrations.
-	depth          int                               // Number of steps in the staircase. If 0, all migrations will be used.
-	migrateUp      string                            // Command to run upgrade for single migration.
-	migrateDown    string                            // Command to run downgrade for single migration.
-	postgresUrl    string                            // Connection string for PostgreSQL. For example: "postgres://user:password@localhost:5432/dbname".
-	dbClient       *driver.PostgresClient            // DB client for executing queries.
-	baseline       map[string]*driver.SchemaSnapshot // Etalon snapshots.
+	migrationsPath         string                            // Path to the directory with .sql migration files.
+	compareSchemaSnapshots bool                              // If true, compare schema before and after migration. If false, only run migrations.
+	depth                  int                               // Number of steps in the staircase. If 0, all migrations will be used.
+	upgradeCmd             string                            // Command to run upgrade for single migration.
+	downgradeCmd           string                            // Command to run downgrade for single migration.
+	postgresUrl            string                            // Connection string for PostgreSQL. For example: "postgres://user:password@localhost:5432/dbname".
+	dbClient               *driver.PostgresClient            // DB client for executing queries.
+	baseline               map[string]*driver.SchemaSnapshot // Etalon snapshots.
+	schemas                []string                          // List of schemas to be processed.
 }
 
 func NewStaircaseWorker(
 	migrationsPath string,
-	testSchema bool,
+	compareSchemaSnapshots bool,
 	depth int,
-	migrateUp string,
-	migrateDown string,
+	upgradeCmd string,
+	downgradeCmd string,
 	postgresUrl string,
+	schemas []string,
 ) *StaircaseWorker {
 	return &StaircaseWorker{
-		migrationsPath: migrationsPath,
-		testSchema:     testSchema,
-		depth:          depth,
-		migrateUp:      migrateUp,
-		migrateDown:    migrateDown,
-		postgresUrl:    postgresUrl,
-		baseline:       make(map[string]*driver.SchemaSnapshot),
+		migrationsPath:         migrationsPath,
+		compareSchemaSnapshots: compareSchemaSnapshots,
+		depth:                  depth,
+		upgradeCmd:             upgradeCmd,
+		downgradeCmd:           downgradeCmd,
+		postgresUrl:            postgresUrl,
+		baseline:               make(map[string]*driver.SchemaSnapshot),
+		schemas:                schemas,
 	}
 }
 
@@ -85,7 +88,7 @@ func (s *StaircaseWorker) actualiseDb(migrations []string) error {
 	for i, migration := range migrations {
 		log.Printf("Running migration %d/%d: %s", i+1, len(migrations), migration)
 
-		if out, err := s.executeCommand(s.migrateUp, migration); err != nil {
+		if out, err := s.executeCommand(s.upgradeCmd, migration); err != nil {
 			return fmt.Errorf("apply migration %q (step %d): %w", migration, i+1, err)
 		} else {
 			log.Println("Migration output:", out)
@@ -120,7 +123,7 @@ func (s *StaircaseWorker) processDownUpDown(migrations []string) error {
 		if err := s.makeDownStep(migration, i); err != nil {
 			return fmt.Errorf("down step %q: %w", migration, err)
 		}
-		if s.testSchema {
+		if s.compareSchemaSnapshots {
 			snapAfterDown, err := s.makeSchemaSnapshot()
 			if err != nil {
 				return fmt.Errorf("snapshot after first down %q: %w", migration, err)
@@ -136,7 +139,7 @@ func (s *StaircaseWorker) processDownUpDown(migrations []string) error {
 		if err := s.makeUpStep(migration, i); err != nil {
 			return fmt.Errorf("up step %q: %w", migration, err)
 		}
-		if s.testSchema {
+		if s.compareSchemaSnapshots {
 			snapAfterUp, err := s.makeSchemaSnapshot()
 			if err != nil {
 				return fmt.Errorf("snapshot after down-up %q: %w", migration, err)
@@ -150,7 +153,7 @@ func (s *StaircaseWorker) processDownUpDown(migrations []string) error {
 		if err := s.makeDownStep(migration, i); err != nil {
 			return fmt.Errorf("final down step %q: %w", migration, err)
 		}
-		if s.testSchema && basePrev != nil {
+		if s.compareSchemaSnapshots && basePrev != nil {
 			snapAfterFinalDown, err := s.makeSchemaSnapshot()
 			if err != nil {
 				return fmt.Errorf("snapshot after final down %q: %w", migration, err)
@@ -191,7 +194,7 @@ func (s *StaircaseWorker) processUpDownUp(migrations []string) error {
 		if err := s.makeDownStep(migration, step); err != nil {
 			return fmt.Errorf("down step %q: %w", migration, err)
 		}
-		if s.testSchema && basePrev != nil {
+		if s.compareSchemaSnapshots && basePrev != nil {
 			afterDown, err := s.makeSchemaSnapshot()
 			if err != nil {
 				return fmt.Errorf("snapshot after down %q: %w", migration, err)
@@ -206,7 +209,7 @@ func (s *StaircaseWorker) processUpDownUp(migrations []string) error {
 		if err := s.makeUpStep(migration, step); err != nil {
 			return fmt.Errorf("final up step %q: %w", migration, err)
 		}
-		if s.testSchema {
+		if s.compareSchemaSnapshots {
 			afterFinalUp, err := s.makeSchemaSnapshot()
 			if err != nil {
 				return fmt.Errorf("snapshot after final up %q: %w", migration, err)
@@ -222,7 +225,7 @@ func (s *StaircaseWorker) processUpDownUp(migrations []string) error {
 
 func (s *StaircaseWorker) makeUpStep(migration string, step int) error {
 	log.Printf("Applying migration %s (step %d)", migration, step)
-	output, err := s.executeCommand(s.migrateUp, migration)
+	output, err := s.executeCommand(s.upgradeCmd, migration)
 	if err != nil {
 		return fmt.Errorf("apply migration %q (step %d): %w", migration, step, err)
 	}
@@ -232,7 +235,7 @@ func (s *StaircaseWorker) makeUpStep(migration string, step int) error {
 
 func (s *StaircaseWorker) makeDownStep(migration string, step int) error {
 	log.Printf("Reverting migration %s (step %d)", migration, step)
-	output, err := s.executeCommand(s.migrateDown, migration)
+	output, err := s.executeCommand(s.downgradeCmd, migration)
 	if err != nil {
 		return fmt.Errorf("revert migration %q (step %d): %w", migration, step, err)
 	}
@@ -268,40 +271,92 @@ func (s *StaircaseWorker) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		EnumTypes:   make(map[string]driver.EnumDefinition),
 		ForeignKeys: make(map[string]driver.ForeignKeyDefinition),
 	}
-	s.scanColumns(snapshot)
-	s.scanConstraints(snapshot)
-	s.scanEnums(snapshot)
-	s.scanFks(snapshot)
-	s.scanFunctions(snapshot)
-	s.scanIndexes(snapshot)
-	s.scanSeqs(snapshot)
-	s.scanTriggers(snapshot)
-	s.scanViews(snapshot)
+	if err := s.scanTables(snapshot); err != nil {
+		return nil, fmt.Errorf("scan tables: %w", err)
+	}
+	if err := s.scanColumns(snapshot); err != nil {
+		return nil, fmt.Errorf("scan columns: %w", err)
+	}
+	if err := s.scanConstraints(snapshot); err != nil {
+		return nil, fmt.Errorf("scan constraints: %w", err)
+	}
+	if err := s.scanEnums(snapshot); err != nil {
+		return nil, fmt.Errorf("scan enums: %w", err)
+	}
+	if err := s.scanFks(snapshot); err != nil {
+		return nil, fmt.Errorf("scan foreign keys: %w", err)
+	}
+	if err := s.scanFunctions(snapshot); err != nil {
+		return nil, fmt.Errorf("scan functions: %w", err)
+	}
+	if err := s.scanIndexes(snapshot); err != nil {
+		return nil, fmt.Errorf("scan indexes: %w", err)
+	}
+	if err := s.scanSeqs(snapshot); err != nil {
+		return nil, fmt.Errorf("scan sequences: %w", err)
+	}
+	if err := s.scanTriggers(snapshot); err != nil {
+		return nil, fmt.Errorf("scan triggers: %w", err)
+	}
+	if err := s.scanViews(snapshot); err != nil {
+		return nil, fmt.Errorf("scan views: %w", err)
+	}
 	return snapshot, nil
 }
 
+func (s *StaircaseWorker) scanTables(snapshot *driver.SchemaSnapshot) error {
+	tablesQuery := fmt.Sprintf(
+		`
+            SELECT tablename
+            FROM pg_catalog.pg_tables
+            WHERE %s
+            ORDER BY tablename;
+        `,
+		s.buildSchemaCond("schemaname"),
+	)
+	rows, err := s.dbClient.Execute(tablesQuery)
+	if err != nil {
+		return fmt.Errorf("query tables: %w", err)
+	}
+	defer rows.Rows.Close()
+
+	for rows.Rows.Next() {
+		var tableName string
+		if err := rows.Rows.Scan(&tableName); err != nil {
+			return fmt.Errorf("scan table row: %w", err)
+		}
+		if _, ok := snapshot.Tables[tableName]; !ok {
+			snapshot.Tables[tableName] = driver.TableDefinition{}
+		}
+	}
+	return rows.Rows.Err()
+}
+
 func (s *StaircaseWorker) scanColumns(snapshot *driver.SchemaSnapshot) error {
-	const columnsQuery = `
-        SELECT
-            table_name,
-            column_name,
-            data_type,
-            udt_name,
-            datetime_precision,
-            is_nullable,
-            collation_name,
-            is_identity,
-            identity_generation,
-            is_generated,
-            generation_expression,
-            column_default,
-            character_maximum_length,
-            numeric_precision,
-            numeric_scale
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-        ORDER BY table_name, ordinal_position;
-    `
+	columnsQuery := fmt.Sprintf(
+		`
+            SELECT
+                table_name,
+                column_name,
+                data_type,
+                udt_name,
+                datetime_precision,
+                is_nullable,
+                collation_name,
+                is_identity,
+                identity_generation,
+                is_generated,
+                generation_expression,
+                column_default,
+                character_maximum_length,
+                numeric_precision,
+                numeric_scale
+            FROM information_schema.columns
+            WHERE %s
+            ORDER BY table_name, ordinal_position;
+        `,
+		s.buildSchemaCond("table_schema"),
+	)
 	colRows, err := s.dbClient.Execute(columnsQuery)
 	if err != nil {
 		return fmt.Errorf("query columns: %w", err)
@@ -366,13 +421,16 @@ func (s *StaircaseWorker) scanColumns(snapshot *driver.SchemaSnapshot) error {
 }
 
 func (s *StaircaseWorker) scanViews(snapshot *driver.SchemaSnapshot) error {
-	const viewsQuery = `
-        SELECT
-            viewname AS table_name,
-            pg_get_viewdef(viewname::regclass, true) AS definition
-        FROM pg_views
-        WHERE schemaname = 'public';
-    `
+	viewsQuery := fmt.Sprintf(
+		`
+            SELECT
+                viewname AS table_name,
+                pg_get_viewdef(viewname::regclass, true) AS definition
+            FROM pg_views
+            WHERE %s;
+        `,
+		s.buildSchemaCond("schemaname"),
+	)
 	viewRows, err := s.dbClient.Execute(viewsQuery)
 	if err != nil {
 		return fmt.Errorf("query views: %w", err)
@@ -392,11 +450,15 @@ func (s *StaircaseWorker) scanViews(snapshot *driver.SchemaSnapshot) error {
 }
 
 func (s *StaircaseWorker) scanIndexes(snapshot *driver.SchemaSnapshot) error {
-	const indexesQuery = `
-        SELECT indexname, indexdef
-        FROM pg_indexes
-        WHERE schemaname = 'public';
-    `
+	indexesQuery := fmt.Sprintf(
+		`
+            SELECT indexname, indexdef
+            FROM pg_indexes
+            WHERE %s
+            ORDER BY indexname;
+        `,
+		s.buildSchemaCond("schemaname"),
+	)
 	indexRows, err := s.dbClient.Execute(indexesQuery)
 	if err != nil {
 		return fmt.Errorf("query indexes: %w", err)
@@ -416,17 +478,20 @@ func (s *StaircaseWorker) scanIndexes(snapshot *driver.SchemaSnapshot) error {
 }
 
 func (s *StaircaseWorker) scanConstraints(snapshot *driver.SchemaSnapshot) error {
-	const constraintsQuery = `
-        SELECT
-            tc.constraint_name,
-            tc.table_name,
-            tc.constraint_type,
-            cc.check_clause
-        FROM information_schema.table_constraints tc
-        LEFT JOIN information_schema.check_constraints cc
-               ON tc.constraint_name = cc.constraint_name
-        WHERE tc.table_schema = 'public';
-    `
+	constraintsQuery := fmt.Sprintf(
+		`
+            SELECT
+                tc.constraint_name,
+                tc.table_name,
+                tc.constraint_type,
+                cc.check_clause
+            FROM information_schema.table_constraints tc
+            LEFT JOIN information_schema.check_constraints cc
+                   ON tc.constraint_name = cc.constraint_name
+            WHERE %s;
+        `,
+		s.buildSchemaCond("tc.table_schema"),
+	)
 	constrRows, err := s.dbClient.Execute(constraintsQuery)
 	if err != nil {
 		return fmt.Errorf("query constraints: %w", err)
@@ -458,14 +523,19 @@ func (s *StaircaseWorker) scanConstraints(snapshot *driver.SchemaSnapshot) error
 }
 
 func (s *StaircaseWorker) scanEnums(snapshot *driver.SchemaSnapshot) error {
-	const enumQuery = `
-        SELECT
-            t.typname,
-            e.enumlabel
-        FROM pg_type t
-        JOIN pg_enum e ON t.oid = e.enumtypid
-        ORDER BY t.typname, e.enumsortorder;
-    `
+	enumQuery := fmt.Sprintf(
+		`
+            SELECT
+                t.typname,
+                e.enumlabel
+            FROM pg_type t
+            JOIN pg_enum e ON t.oid = e.enumtypid
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE %s
+            ORDER BY t.typname, e.enumsortorder;
+        `,
+		s.buildSchemaCond("n.nspname"),
+	)
 	enumRows, err := s.dbClient.Execute(enumQuery)
 	if err != nil {
 		return fmt.Errorf("query enum types: %w", err)
@@ -487,22 +557,25 @@ func (s *StaircaseWorker) scanEnums(snapshot *driver.SchemaSnapshot) error {
 }
 
 func (s *StaircaseWorker) scanFks(snapshot *driver.SchemaSnapshot) error {
-	const foreignKeysQuery = `
-        SELECT
-            tc.constraint_name,
-            tc.table_name,
-            kcu.column_name,
-            ccu.table_name  AS foreign_table_name,
-            ccu.column_name AS foreign_column_name,
-            rc.update_rule,
-            rc.delete_rule
-        FROM information_schema.table_constraints        AS tc
-        JOIN information_schema.key_column_usage         AS kcu ON tc.constraint_name = kcu.constraint_name
-        JOIN information_schema.referential_constraints  AS rc  ON tc.constraint_name = rc.constraint_name
-        JOIN information_schema.constraint_column_usage  AS ccu ON ccu.constraint_name = tc.constraint_name
-        WHERE tc.constraint_type = 'FOREIGN KEY'
-          AND tc.table_schema  = 'public';
-    `
+	foreignKeysQuery := fmt.Sprintf(
+		`
+            SELECT
+                tc.constraint_name,
+                tc.table_name,
+                kcu.column_name,
+                ccu.table_name  AS foreign_table_name,
+                ccu.column_name AS foreign_column_name,
+                rc.update_rule,
+                rc.delete_rule
+            FROM information_schema.table_constraints        AS tc
+            JOIN information_schema.key_column_usage         AS kcu ON tc.constraint_name = kcu.constraint_name
+            JOIN information_schema.referential_constraints  AS rc  ON tc.constraint_name = rc.constraint_name
+            JOIN information_schema.constraint_column_usage  AS ccu ON ccu.constraint_name = tc.constraint_name
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+              AND %s;
+        `,
+		s.buildSchemaCond("tc.table_schema"),
+	)
 	rows, err := s.dbClient.Execute(foreignKeysQuery)
 	if err != nil {
 		return fmt.Errorf("query foreign keys: %w", err)
@@ -542,17 +615,20 @@ func (s *StaircaseWorker) scanFks(snapshot *driver.SchemaSnapshot) error {
 }
 
 func (s *StaircaseWorker) scanTriggers(snapshot *driver.SchemaSnapshot) error {
-	const triggersQuery = `
-		SELECT
-			trigger_name,
-			event_manipulation,
-			event_object_table,
-			action_timing,
-			action_statement
-		FROM information_schema.triggers
-		WHERE trigger_schema = 'public'
-		ORDER BY trigger_name;
-	`
+	triggersQuery := fmt.Sprintf(
+		`
+            SELECT
+                trigger_name,
+                event_manipulation,
+                event_object_table,
+                action_timing,
+                action_statement
+            FROM information_schema.triggers
+            WHERE %s
+            ORDER BY trigger_name;
+        `,
+		s.buildSchemaCond("trigger_schema"),
+	)
 	rows, err := s.dbClient.Execute(triggersQuery)
 	if err != nil {
 		return fmt.Errorf("query triggers: %w", err)
@@ -590,13 +666,16 @@ func (s *StaircaseWorker) scanTriggers(snapshot *driver.SchemaSnapshot) error {
 }
 
 func (s *StaircaseWorker) scanFunctions(snapshot *driver.SchemaSnapshot) error {
-	const q = `
-		SELECT routine_name, routine_type, data_type, routine_definition
-		FROM information_schema.routines
-		WHERE specific_schema = 'public'
-		ORDER BY routine_name;
-	`
-	rows, err := s.dbClient.Execute(q)
+	routinesQuery := fmt.Sprintf(
+		`
+            SELECT routine_name, routine_type, data_type, routine_definition
+            FROM information_schema.routines
+            WHERE %s
+            ORDER BY routine_name;
+        `,
+		s.buildSchemaCond("specific_schema"),
+	)
+	rows, err := s.dbClient.Execute(routinesQuery)
 	if err != nil {
 		return fmt.Errorf("query functions: %w", err)
 	}
@@ -623,13 +702,16 @@ func (s *StaircaseWorker) scanFunctions(snapshot *driver.SchemaSnapshot) error {
 }
 
 func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
-	const q = `
-		SELECT sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
-		FROM information_schema.sequences
-		WHERE sequence_schema = 'public'
-		ORDER BY sequence_name;
-	`
-	rows, err := s.dbClient.Execute(q)
+	seqQuery := fmt.Sprintf(
+		`
+            SELECT sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
+            FROM information_schema.sequences
+            WHERE %s
+            ORDER BY sequence_name;
+        `,
+		s.buildSchemaCond("sequence_schema"),
+	)
+	rows, err := s.dbClient.Execute(seqQuery)
 	if err != nil {
 		return fmt.Errorf("query sequences: %w", err)
 	}
@@ -712,10 +794,20 @@ func (s *StaircaseWorker) compareSchemas(before, after *driver.SchemaSnapshot) e
 	return nil
 }
 
-func (s *StaircaseWorker) baselineFor(migration string) (*driver.SchemaSnapshot, error) {
-	snap, ok := s.baseline[migration]
-	if !ok {
-		return nil, fmt.Errorf("baseline for %q not found", migration)
+// buildSchemaCond("table_schema") -> "table_schema = 'public'"
+// buildSchemaCond("tc.table_schema") -> "tc.table_schema IN ('public','extra')"
+func (s *StaircaseWorker) buildSchemaCond(col string) string {
+	list := s.schemas
+	if len(list) == 0 {
+		list = []string{"public"}
 	}
-	return snap, nil
+	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+	if len(list) == 1 {
+		return fmt.Sprintf("%s = %s", col, quote(list[0]))
+	}
+	quoted := make([]string, len(list))
+	for i, v := range list {
+		quoted[i] = quote(v)
+	}
+	return fmt.Sprintf("%s IN (%s)", col, strings.Join(quoted, ", "))
 }
