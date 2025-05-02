@@ -85,13 +85,13 @@ func newStaircaseCmd() *cobra.Command {
 		&postgresURL,
 		"postgres-url",
 		"",
-		"PostgreSQL URL (fallback: $DATABASE_URL)",
+		"PostgreSQL URL (required OR fallback — $DATABASE_URL env variable)",
 	)
 	cmd.Flags().StringVar(
 		&migrationsPath,
 		"migrations-path",
 		"",
-		"Path to migrations (required). Migrations must be in lexicographical order",
+		"Path to migrations. Migrations must be in lexicographical order (required)",
 	)
 	cmd.Flags().StringVar(
 		&upgradeCmd,
@@ -109,30 +109,31 @@ func newStaircaseCmd() *cobra.Command {
 		&compareSchemaSnapshots,
 		"test-snapshots",
 		true,
-		"Compare schema snapshots (default true). If false, only checks fact that migrations are applied / reverted with no errors",
+		"Compare schema snapshots. If false, only checks fact that migrations are applied / reverted with no errors",
 	)
 	cmd.Flags().StringArrayVar(
 		&schemas,
 		"schema",
 		[]string{"public"},
-		"Schemas to test (default: public)",
+		"Schemas to test",
 	)
 	cmd.Flags().IntVar(
 		&depth,
 		"depth",
 		0,
-		"Depth of staircase testing (0 = all)",
+		"Depth of staircase testing (0 = all). If depth is N, only the last N migrations will be processed",
 	)
 	cmd.Flags().StringVar(
 		&migrationsExtension,
 		"migrations-extension",
 		".sql",
-		"Extension of migration files (default: .sql)",
+		"Extension of migration files",
 	)
 
 	_ = cmd.MarkFlagRequired("migrations-path")
 	_ = cmd.MarkFlagRequired("upgrade")
 	_ = cmd.MarkFlagRequired("downgrade")
 
+	cmd.Flags().SortFlags = false
 	return cmd
 }
