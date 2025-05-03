@@ -27,8 +27,8 @@ run_one() {
   dir="$1"
   seqwall staircase \
       --migrations-path "$dir" \
-      --upgrade 'MIGRATION_FILE="{current_migration}"; TMPDIR=$(mktemp -d); cp "$MIGRATION_FILE" "$TMPDIR"; DBMATE_MIGRATIONS_DIR="$TMPDIR" dbmate up; rm -rf "$TMPDIR"' \
-      --downgrade "DBMATE_MIGRATIONS_DIR=\"$dir\" dbmate down" \
+      --upgrade  'MIGRATION_FILE="{current_migration}"; TMPDIR=$(mktemp -d); cp "$MIGRATION_FILE" "$TMPDIR"; DBMATE_MIGRATIONS_DIR="$TMPDIR" dbmate --no-dump-schema up;   rm -rf "$TMPDIR"' \
+      --downgrade "DBMATE_MIGRATIONS_DIR=\"$dir\" dbmate --no-dump-schema down" \
       --postgres-url "$DATABASE_URL"
 }
 
