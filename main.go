@@ -15,14 +15,14 @@ const (
 )
 
 type StaircaseOptions struct {
-	MigrationsPath         string
-	UpgradeCmd             string
-	DowngradeCmd           string
-	PostgresURL            string
-	MigrationsExtension    string
-	Schemas                []string
-	Depth                  int
-	CompareSchemaSnapshots bool
+	MigrationsPath         string   `json:"migrations-path"`
+	UpgradeCmd             string   `json:"upgrade"`
+	DowngradeCmd           string   `json:"downgrade"`
+	PostgresURL            string   `json:"postgres-url"`
+	MigrationsExtension    string   `json:"migrations-extension"`
+	Schemas                []string `json:"schemas"`
+	Depth                  int      `json:"depth"`
+	CompareSchemaSnapshots bool     `json:"compare-snapshots"`
 }
 
 func main() {
