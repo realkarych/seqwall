@@ -83,7 +83,7 @@ Each migration must be reversible and must not break the schema if applied, reve
 ### Snapshots reveal the truth
 
 After each migration, Seqwall captures the schema using **`information_schema` views**,
-adhering to the **<a href="https://www.iso.org/standard/76583.html">ISO/IEC 9075</a> SQL standard**.
+adhering to the **<a href="https://www.iso.org/standard/76586.html">ISO/IEC 9075-11</a> SQL standard**.
 
 This includes _tables_, _columns_, _constraints_, _indexes_, _views_, _triggers_, _functions_, _enums_, _sequences_, and _foreign keys_.
 The snapshots are then compared using structured diffs, allowing detection of even subtle schema differences or mismatches.
@@ -150,7 +150,7 @@ Seqwall focuses on **schema-level structural correctness** — nothing more, not
 
 ### Ready to contribute code?
 
-- Look for issues marked with `help wanted` or `good first issue`. _In fact, you can pick any issue without Assignees_.
+- Look for issues marked with `help wanted` or `good first issue`. _In fact, you can pick any issue without Assignees_ 😊️️️️️️.
 - Fork the repo, create a branch, and open a pull request when ready (and tag `@realkarych` for review).
 
 Your feedback and contributions are always welcome 💙
