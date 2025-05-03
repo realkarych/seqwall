@@ -62,7 +62,7 @@ func (s *StaircaseWorker) Run() error {
 		return fmt.Errorf("load migrations: %w", err)
 	}
 	if len(migrations) == 0 {
-		return fmt.Errorf("no migrations found in %s", s.migrationsPath)
+		return fmt.Errorf("%w: %s", ErrNoMigrations(), s.migrationsPath)
 	}
 	log.Printf("Recognized %d migrations", len(migrations))
 	log.Println("Processing staircase…")
@@ -170,7 +170,7 @@ func (s *StaircaseWorker) processDownUpDown(migs []string) error {
 		mig := migs[len(migs)-i]
 		cur, ok := s.baseline[mig]
 		if !ok {
-			return fmt.Errorf("baseline for %q not found", mig)
+			return fmt.Errorf("%w: %s", ErrBaselineNotFound(), mig)
 		}
 		var prev *driver.SchemaSnapshot
 		if idx := len(migs) - i - 1; idx >= 0 {
@@ -193,7 +193,7 @@ func (s *StaircaseWorker) processUpDownUp(migs []string) error {
 		step := i + 1
 		cur, ok := s.baseline[mig]
 		if !ok {
-			return fmt.Errorf("baseline for %q not found", mig)
+			return fmt.Errorf("%w: %s", ErrBaselineNotFound(), mig)
 		}
 		var prev *driver.SchemaSnapshot
 		if idx := len(migs) - steps + i - 1; idx >= 0 {
@@ -772,7 +772,7 @@ func (s *StaircaseWorker) compareSchemas(before, after *driver.SchemaSnapshot) e
 		return fmt.Errorf("diff: %w", err)
 	}
 	if out != "" {
-		return fmt.Errorf("schema snapshots differ:\n%s", out)
+		return fmt.Errorf("%w:\n%s", ErrSnapshotsDiffer(), out)
 	}
 	return nil
 }

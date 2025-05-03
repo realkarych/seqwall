@@ -62,7 +62,7 @@ func newStaircaseCmd() *cobra.Command {
 				postgresURL = os.Getenv("DATABASE_URL")
 			}
 			if postgresURL == "" {
-				return fmt.Errorf("--postgres-url flag or DATABASE_URL env is required")
+				return seqwall.ErrPostgresURLRequired()
 			}
 			return nil
 		},
