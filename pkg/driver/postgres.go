@@ -76,10 +76,9 @@ type TriggerDefinition struct {
 }
 
 type FunctionDefinition struct {
-	RoutineName       string `db:"routine_name"       json:"routine_name"`
-	RoutineType       string `db:"routine_type"       json:"routine_type"`
-	ReturnType        string `db:"return_type"        json:"return_type"`
-	RoutineDefinition string `db:"routine_definition" json:"routine_definition"`
+	RoutineName string `db:"routine_name" json:"routine_name"`
+	RoutineType string `db:"routine_type" json:"routine_type"`
+	ReturnType  string `db:"return_type"  json:"return_type"`
 }
 
 type SchemaSnapshot struct {

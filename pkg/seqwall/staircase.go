@@ -641,7 +641,7 @@ func (s *StaircaseWorker) scanTriggers(snapshot *driver.SchemaSnapshot) error {
 func (s *StaircaseWorker) scanFunctions(snapshot *driver.SchemaSnapshot) error {
 	routinesQuery := fmt.Sprintf(
 		`
-            SELECT routine_name, routine_type, data_type, routine_definition
+            SELECT routine_name, routine_type, data_type
             FROM information_schema.routines
             WHERE %s
             ORDER BY routine_name;
@@ -657,15 +657,22 @@ func (s *StaircaseWorker) scanFunctions(snapshot *driver.SchemaSnapshot) error {
 		snapshot.Functions = make(map[string]driver.FunctionDefinition)
 	}
 	for rows.Rows.Next() {
-		var routineName, routineType, returnType, routineDefinition string
-		if err := rows.Rows.Scan(&routineName, &routineType, &returnType, &routineDefinition); err != nil {
+		var (
+			routineName     string
+			routineTypeNull sql.NullString
+			returnType      string
+		)
+		if err := rows.Rows.Scan(&routineName, &routineTypeNull, &returnType); err != nil {
 			return fmt.Errorf("scan function row: %w", err)
 		}
+		routineType := ""
+		if routineTypeNull.Valid {
+			routineType = routineTypeNull.String
+		}
 		snapshot.Functions[routineName] = driver.FunctionDefinition{
-			RoutineName:       routineName,
-			RoutineType:       routineType,
-			ReturnType:        returnType,
-			RoutineDefinition: routineDefinition,
+			RoutineName: routineName,
+			RoutineType: routineType,
+			ReturnType:  returnType,
 		}
 	}
 	if err := rows.Rows.Err(); err != nil {
