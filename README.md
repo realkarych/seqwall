@@ -4,7 +4,10 @@
 </p>
 </a>
 
-*<p align=center><a href="https://github.com/realkarych/seqwall">Seqwall</a> is a tool for PostgreSQL migrations testing. Ensure that every migration is reversible, idempotent, compatible with others in sequence, structurally sound and verifiable.</p>*
+<p align="center">
+  <a href="https://github.com/realkarych/seqwall">Seqwall</a> is a tool for PostgreSQL migrations testing.<br>
+  Ensure that every migration is reversible, idempotent, compatible with others in sequence, structurally sound and verifiable.
+</p>
 
 <hr>
 
@@ -38,7 +41,8 @@ sudo apt upgrade  seqwall         # later updates
 
 ### Other distros / Windows
 
-Download the pre‑built archive from the **[Releases](https://github.com/realkarych/seqwall/releases)** page, unpack, add the binary to your `PATH`.
+Download the pre‑built archive from the **[Releases](https://github.com/realkarych/seqwall/releases)** page, unpack,
+add the binary to your `PATH`.
 
 > On Windows, you may need `Unblock-File .\seqwall.exe` before first run.
 
@@ -53,7 +57,7 @@ go install github.com/realkarych/seqwall@latest
 
 ### ✅ Once installed, verify it works
 
-```
+```shell
 ❯ seqwall staircase --help
 Launch staircase testing
 
@@ -67,7 +71,8 @@ Flags:
       --downgrade string              Shell command that reverts current migration (required)
       --migrations-extension string   Extension of migration files (default: .sql)
       --schema stringArray            Schemas to test (default [public])
-      --test-snapshots                Compare schema snapshots. If false, only checks fact that migrations are applied / reverted with no errors (default true)
+      --test-snapshots                Compare schema snapshots. If false, only checks fact that migrations are applied
+                                      / reverted with no errors (default true)
       --depth int                     Depth of staircase testing (0 = all)
       --help                          help for staircase
 ```
@@ -85,18 +90,22 @@ Each migration must be reversible and must not break the schema if applied, reve
 After each migration, Seqwall captures the schema using **`information_schema` views**,
 adhering to the **<a href="https://www.iso.org/standard/76586.html">ISO/IEC 9075-11</a> SQL standard**.
 
-This includes _tables_, _columns_, _constraints_, _indexes_, _views_, _triggers_, _functions_, _enums_, _sequences_, and _foreign keys_.
+This includes *tables*, *columns*, *constraints*, *indexes*, *views*,
+*triggers*, *functions*, *enums*, *sequences*, and *foreign keys*.
 The snapshots are then compared using structured diffs, allowing detection of even subtle schema differences or mismatches.
 
-### `Staircase` testing guarantees _schema_ consistency
+### `Staircase` testing guarantees *schema* consistency
 
 We use a 3-phase strategy:
-1. **`actualize`** — applying all migrations and captures _etalon_ schema snapshot for each migration.
+
+1. **`actualize`** — applying all migrations and captures *etalon* schema snapshot for each migration.
+
 2. **`down → up → down`** — starting from the latest migration, step backwards:
    - downgrade one migration,
    - upgrade it again,
    - then downgrade once more (down step).
-   - At each step, the schema is compared with previously captured _etalon_ snapshots — both before and after — ensuring reversibility and no drift.
+   - At each step, the schema is compared with previously captured
+   *etalon* snapshots — both before and after — ensuring reversibility and no drift.
 
 3. **`up → down → up`** — starting from the lower point reached in step 2 (after several rollbacks):
    - re-apply each migration one by one,
@@ -124,6 +133,7 @@ Seqwall just executes shell commands.
 Does this mean Seqwall is the only tool you need for testing migrations?
 
 No — databases involve a spectrum of concerns, and a complete testing strategy should include:
+
 - Load testing — to observe performance & regressions
 - Lock behavior analysis — to catch deadlocks and blocking issues
 - Data state testing — to ensure data survives or transforms as expected
@@ -137,20 +147,23 @@ Seqwall focuses on **schema-level structural correctness** — nothing more, not
 
 ### Found a bug?
 
-- Please [open an issue](https://github.com/realkarych/seqwall/issues/new?template=bug.yml) with a clear description, reproduction steps (if possible), and expected vs. actual behavior.
+- Please [open an issue](https://github.com/realkarych/seqwall/issues/new?template=bug.yml) with a clear description,
+reproduction steps (if possible), and expected vs. actual behavior.
 
 ### Have a question?
 
-- Please [open a discussion](https://github.com/realkarych/seqwall/discussions/categories/q-a) in QA section. Or feel free to message me on Telegram: [`@karych`](https://t.me/karych).
+- Please [open a discussion](https://github.com/realkarych/seqwall/discussions/categories/q-a) in QA section.
+Or feel free to message me on Telegram: [`@karych`](https://t.me/karych).
 
 ### Want to suggest a feature?
 
 - If you have a concrete and well-scoped idea — feel free to [open a feature request](https://github.com/realkarych/seqwall/issues/new?template=feature_request.yml).
-- If the idea is more exploratory — start a [discussion](https://github.com/realkarych/seqwall/discussions/categories/ideas) instead.
+- If the idea is more exploratory — start a
+[discussion](https://github.com/realkarych/seqwall/discussions/categories/ideas) instead.
 
 ### Ready to contribute code?
 
-- Look for issues marked with `help wanted` or `good first issue`. _In fact, you can pick any issue without Assignees_ 😊️️️️️️.
+- Look for issues marked with `help wanted` or `good first issue`. *In fact, you can pick any issue without Assignees* 😊️️️️️️.
 - Fork the repo, create a branch, and open a pull request when ready (and tag `@realkarych` for review).
 
-Your feedback and contributions are always welcome 💙
+Your feedback and contributions are always welcome 💙.
