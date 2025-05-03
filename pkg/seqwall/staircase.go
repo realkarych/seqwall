@@ -15,16 +15,16 @@ import (
 )
 
 type StaircaseWorker struct {
-	migrationsPath         string                            // Path to the directory with migration files.
-	compareSchemaSnapshots bool                              // If true, compare schema before and after migration. If false, only run migrations.
-	depth                  int                               // Number of steps in the staircase. If 0, all migrations will be processed.
-	upgradeCmd             string                            // Command to run upgrade for single migration.
-	downgradeCmd           string                            // Command to run downgrade for single migration.
-	postgresUrl            string                            // Connection string for PostgreSQL. For example: "postgres://user:password@localhost:5432/dbname".
 	dbClient               *driver.PostgresClient            // DB client for executing queries.
 	baseline               map[string]*driver.SchemaSnapshot // Etalon snapshots.
 	schemas                []string                          // List of schemas to be processed.
+	migrationsPath         string                            // Path to the directory with migration files.
+	upgradeCmd             string                            // Command to run upgrade for single migration.
+	downgradeCmd           string                            // Command to run downgrade for single migration.
+	postgresUrl            string                            // Connection string for PostgreSQL. For example: "postgres://user:password@localhost:5432/dbname".
 	migrationsExtension    string                            // Extension for migration files.
+	depth                  int                               // Number of steps in the staircase. If 0, all migrations will be processed.
+	compareSchemaSnapshots bool                              // If true, compare schema before and after migration. If false, only run migrations.
 }
 
 func NewStaircaseWorker(
