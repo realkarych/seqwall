@@ -14,6 +14,10 @@ import (
 	"github.com/realkarych/seqwall/pkg/driver"
 )
 
+const (
+	diffContextLines = 3
+)
+
 type StaircaseWorker struct {
 	dbClient               *driver.PostgresClient
 	baseline               map[string]*driver.SchemaSnapshot
@@ -716,11 +720,12 @@ func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 }
 
 func normalizeConstraints(src map[string]driver.ConstraintDefinition) map[string]driver.ConstraintDefinition {
+	checkNullConstraintSubmatchCount := 2
 	res := make(map[string]driver.ConstraintDefinition)
 	re := regexp.MustCompile(`^([A-Za-z0-9_]+)\s+IS\s+NOT\s+NULL$`)
 	for _, c := range src {
 		if c.ConstraintType == "CHECK" && c.Definition.Valid {
-			if m := re.FindStringSubmatch(c.Definition.String); len(m) == 2 {
+			if m := re.FindStringSubmatch(c.Definition.String); len(m) == checkNullConstraintSubmatchCount {
 				k := c.TableName + "_" + m[1] + "_not_null"
 				res[k] = c
 				continue
@@ -746,7 +751,7 @@ func diffJson(a, b []byte) (string, error) {
 		B:        difflib.SplitLines(string(b)),
 		FromFile: "Snapshot Before",
 		ToFile:   "Snapshot After",
-		Context:  3,
+		Context:  diffContextLines,
 	}
 	return difflib.GetUnifiedDiffString(d)
 }
