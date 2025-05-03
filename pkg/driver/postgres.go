@@ -2,6 +2,7 @@ package driver
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -119,24 +120,25 @@ func NewPostgresClient(postgresPath string) (*PostgresClient, error) {
 }
 
 func (p *PostgresClient) Execute(query string, args ...interface{}) (*QueryResult, error) {
-	trimmedQuery := strings.TrimSpace(query)
-	if strings.HasPrefix(strings.ToUpper(trimmedQuery), "SELECT") {
-		rows, err := p.conn.Query(query, args...)
-		if err != nil {
-			return nil, err
-		}
-		if err := rows.Err(); err != nil {
-			rows.Close()
-			return nil, err
-		}
-		return &QueryResult{Rows: rows}, nil
-	} else {
+	trimmed := strings.TrimSpace(query)
+	if !strings.HasPrefix(strings.ToUpper(trimmed), "SELECT") {
 		result, err := p.conn.Exec(query, args...)
 		if err != nil {
 			return nil, err
 		}
 		return &QueryResult{Result: result}, nil
 	}
+	rows, err := p.conn.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		if cerr := rows.Close(); cerr != nil {
+			return nil, fmt.Errorf("query error: %w; close error: %w", err, cerr)
+		}
+		return nil, err
+	}
+	return &QueryResult{Rows: rows}, nil
 }
 
 func (p *PostgresClient) Close() error {
