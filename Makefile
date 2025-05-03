@@ -3,7 +3,12 @@ SHELL := /bin/bash
 APP_NAME := seqwall
 DIST_DIR := dist
 
-.PHONY: all build ls test lint coverage clean help
+# Docker / CI variables
+PGPORT ?= 5432
+PG_VERS ?= 15
+TEST_IMAGE ?= seqwall-test
+
+.PHONY: all build ls test docker-build docker-test go-test lint coverage clean help
 
 ## Default target
 all: help
@@ -19,9 +24,23 @@ ls:
 	@echo "==> Listing $(DIST_DIR) directory..."
 	@ls -l $(DIST_DIR)
 
-## Run tests
-test:
-	@echo "==> Running tests..."
+## Build the Docker image used for e2e tests
+docker-build:
+	docker build -t $(TEST_IMAGE) -f .ci/Dockerfile .
+
+## Run staircase tests inside the Docker container for each PostgreSQL version
+docker-test: docker-build
+	@for v in $(PG_VERS); do \
+		echo "👉 testing on PostgreSQL $$v ..."; \
+		docker run --rm -v $$PWD:/work -e PG_VERSION=$$v -e PGPORT=$(PGPORT) $(TEST_IMAGE); \
+	done
+
+## Entry‑point for staircase tests
+test: docker-test
+
+## Run unit tests
+go-test:
+	@echo "==> Running unit tests..."
 	go test -v ./...
 
 ## Run linters (golangci-lint)
@@ -46,10 +65,11 @@ clean:
 ## Show help for available targets
 help:
 	@echo "Make targets:"
-	@echo "  build     - Build the binary"
-	@echo "  ls        - Show contents of the dist directory"
-	@echo "  test      - Run tests"
-	@echo "  lint      - Run golangci-lint (make sure it is installed)"
-	@echo "  coverage  - Generate coverage report (coverage.out, coverage.html)"
-	@echo "  clean     - Remove build artifacts"
-	@echo "  help      - Show help for available targets"
+	@echo "  build        - Build the binary"
+	@echo "  ls           - Show contents of the dist directory"
+	@echo "  test         - Run staircase tests in Docker"
+	@echo "  go-test      - Run unit tests"
+	@echo "  lint         - Run golangci-lint"
+	@echo "  coverage     - Generate coverage report (coverage.out, coverage.html)"
+	@echo "  clean        - Remove build artifacts"
+	@echo "  help         - Show this help"
