@@ -8,10 +8,9 @@ on:
       - master
 
 jobs:
-  lint:
+  lint-go:
     name: golangci-lint
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4.2.2
       - name: Set up Go
@@ -33,29 +32,45 @@ jobs:
           version: v1.64.8
           args: --config=.golangci.yml ./...
 
+  lint-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+      - name: Set up Node.js
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: latest
+      - name: Remove existing npm installation
+        run: npm uninstall -g npm
+      - name: Initialize npm
+        run: npm init -y
+      - name: Install dependencies
+        run: npm install
+      - name: Install markdownlint
+        run: npm install -g markdownlint-cli
+      - name: Lint Markdown files
+        run: markdownlint .
+
   unit-test:
     name: Unit tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    needs: lint
+    needs: lint-go
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
-
       - name: Setup Go
         uses: actions/setup-go@v5.4.0
         with:
           go-version-file: go.mod
-
       - name: Download Dependencies
         run: go mod download
-
       - name: Build the binary
         shell: bash
         run: make build ls
-
       - name: Run unit tests
         shell: bash
         run: make go-test
@@ -63,25 +78,20 @@ jobs:
   staircase:
     name: Staircase tests (PostgreSQL ${{ matrix.pg }})
     runs-on: ubuntu-latest
-    needs: lint
-
+    needs: lint-go
     strategy:
       fail-fast: false
       matrix:
         pg: [ '13', '14', '15', '16', '17' ]
-
     env:
       PG_VERSION: ${{ matrix.pg }}
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
-
       - name: Setup Go (cache for Docker build)
         uses: actions/setup-go@v5.4.0
         with:
           go-version-file: go.mod
-
       - name: Build image and run staircase tests
         shell: bash
         run: make PG_VERS="${{ matrix.pg }}" test
