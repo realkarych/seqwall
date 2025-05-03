@@ -74,7 +74,7 @@ Flags:
 
 <hr>
 
-## <p align=center>🧬 Methodology & core principles</p>
+## <p align=center>🧬 Methodology & Core Principles</p>
 
 ### Migrations are contracts
 
