@@ -26,7 +26,7 @@ func loadMigrations(migrationsPath, extension string) ([]string, error) {
 	}
 
 	if len(migrationFiles) == 0 {
-		return migrationFiles, fmt.Errorf("no %s migration files found in directory %s", extension, migrationsPath)
+		return nil, fmt.Errorf("%w: ext=%s dir=%s", ErrNoMigrationFiles(), extension, migrationsPath)
 	}
 
 	sort.Strings(migrationFiles)
