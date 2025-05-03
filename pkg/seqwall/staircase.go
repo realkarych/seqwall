@@ -228,7 +228,7 @@ func (s *StaircaseWorker) makeDownStep(migration string, step int) error {
 }
 
 func (s *StaircaseWorker) executeCommand(command, migration string) (string, error) {
-	command = strings.Replace(command, CurrentMigrationPlaceholder, migration, -1)
+	command = strings.ReplaceAll(command, CurrentMigrationPlaceholder, migration)
 	cmd := exec.Command("sh", "-c", command)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
