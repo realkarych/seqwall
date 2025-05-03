@@ -18,10 +18,17 @@ type DbClient interface {
 	Close() error
 }
 
+type TypeMeta struct {
+	Typtype     string `db:"typtype"     json:"typtype"`
+	Typcategory string `db:"typcategory" json:"typcategory"`
+	TypeOID     int    `db:"type_oid"    json:"type_oid"`
+}
+
 type ColumnDefinition struct {
 	ColumnName             string         `db:"column_name"              json:"column_name"`
 	DataType               string         `db:"data_type"                json:"data_type"`
 	UDTName                string         `db:"udt_name"                 json:"udt_name"`
+	TypeMeta               TypeMeta       `db:"type_meta"                json:"type_meta"`
 	IsNullable             string         `db:"is_nullable"              json:"is_nullable"`
 	IsIdentity             string         `db:"is_identity"              json:"is_identity"`
 	IsGenerated            string         `db:"is_generated"             json:"is_generated"`
@@ -76,10 +83,9 @@ type TriggerDefinition struct {
 }
 
 type FunctionDefinition struct {
-	RoutineName       string `db:"routine_name"       json:"routine_name"`
-	RoutineType       string `db:"routine_type"       json:"routine_type"`
-	ReturnType        string `db:"return_type"        json:"return_type"`
-	RoutineDefinition string `db:"routine_definition" json:"routine_definition"`
+	RoutineName string `db:"routine_name" json:"routine_name"`
+	RoutineType string `db:"routine_type" json:"routine_type"`
+	ReturnType  string `db:"return_type"  json:"return_type"`
 }
 
 type SchemaSnapshot struct {
