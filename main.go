@@ -27,17 +27,18 @@ type StaircaseOptions struct {
 
 func main() {
 	opts := &StaircaseOptions{}
+	exitCode := exitOK
 	defer func() {
 		if r := recover(); r != nil {
 			log.Printf("panic: %v", r)
-			os.Exit(exitError)
+			exitCode = exitError
 		}
+		os.Exit(exitCode)
 	}()
 	if err := newRootCmd(opts).Execute(); err != nil {
 		log.Println(err)
-		os.Exit(exitError)
+		exitCode = exitError
 	}
-	os.Exit(exitOK)
 }
 
 func newRootCmd(opts *StaircaseOptions) *cobra.Command {
