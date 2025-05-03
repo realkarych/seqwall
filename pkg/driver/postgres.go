@@ -19,9 +19,9 @@ type DbClient interface {
 }
 
 type TypeMeta struct {
-	Typtype     string
-	Typcategory string
-	TypeOID     int
+	Typtype     string `db:"typtype"     json:"typtype"`
+	Typcategory string `db:"typcategory" json:"typcategory"`
+	TypeOID     int    `db:"type_oid"    json:"type_oid"`
 }
 
 type ColumnDefinition struct {
