@@ -6,7 +6,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /usr/local/bin/seqwall .
 
 FROM debian:bookworm-slim
-ARG DBMATE_VERSION=2.5.0
+ARG DBMATE_VERSION=2.27.0
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && \
     apt-get install -y --no-install-recommends curl ca-certificates tzdata postgresql-common && \
