@@ -1,13 +1,66 @@
-# Author: https://github.com/IlyasYOY/dotfiles/blob/master/config/.golangci.yml
 ---
 
-version: "2"
-
 run:
-  relative-path-mode: gomod
   concurrency: 8
+  timeout: 10m
   issues-exit-code: 1
   tests: true
+
+issues:
+  exclude-dirs:
+    - bin
+    - vendor
+  exclude:
+    - Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv|.*Rollback). is not checked
+    - should check returned error before deferring
+  exclude-rules:
+    - source: "//noinspection"
+      linters:
+        - gocritic
+    - path: "_test\\.go"
+      linters:
+        - err113
+        - dupl
+        - funlen
+        - goconst
+        - gochecknoglobals
+        - gosec
+        - noctx
+  max-same-issues: 50
+  exclude-use-default: false
+
+linters-settings:
+  revive:
+    confidence: 0.1
+    rules:
+      - name: exported
+        disabled: true
+  stylecheck:
+    checks: ["all", "-ST1020", "-ST1021", "-ST1000", "-ST1003"]
+  interfacebloat:
+    max: 3
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  testifylint:
+    enable-all: true
+  govet:
+    enable-all: true
+  funlen:
+    ignore-comments: true
+  nolintlint:
+    allow-unused: false
+    allow-no-explanation: []
+    require-explanation: true
+    require-specific: true
+  gocognit:
+    min-complexity: 15
+  gocyclo:
+    min-complexity: 15
+  gocritic:
+    enable-all: true
+  nakedret:
+    max-func-lines: 0
 
 linters:
   disable-all: true
@@ -15,8 +68,6 @@ linters:
     - asasalint
     - asciicheck
     - bidichk
-    - bodyclose
-    - canonicalheader
     - copyloopvar
     - cyclop
     - decorder
@@ -27,7 +78,6 @@ linters:
     - errname
     - errorlint
     - exhaustive
-    - exhaustruct
     - fatcontext
     - forbidigo
     - funlen
@@ -39,9 +89,11 @@ linters:
     - goconst
     - gocritic
     - gocyclo
-    - gomodguard
+    - godot
+    - goimports
     - goprintffuncname
     - gosec
+    - gosimple
     - govet
     - inamedparam
     - ineffassign
@@ -64,108 +116,23 @@ linters:
     - prealloc
     - predeclared
     - promlinter
-    - protogetter
     - reassign
     - revive
     - rowserrcheck
     - sloglint
-    - sqlclosecheck
     - staticcheck
+    - stylecheck
     - tagalign
+    - tenv
     - testableexamples
     - testifylint
     - testpackage
     - thelper
     - tparallel
+    - typecheck
     - unconvert
     - unparam
     - unused
     - usestdlibvars
     - wastedassign
     - whitespace
-    - wrapcheck
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-  funlen:
-    ignore-comments: true
-  gocognit:
-    min-complexity: 20
-  gocritic:
-    enable-all: true
-  gocyclo:
-    min-complexity: 20
-  govet:
-    enable-all: true
-  interfacebloat:
-    max: 3
-  nolintlint:
-    require-explanation: true
-    require-specific: true
-    allow-unused: false
-  revive:
-    confidence: 0.1
-    rules:
-      - name: exported
-        disabled: true
-  rowserrcheck:
-    packages:
-      - github.com/jmoiron/sqlx
-  staticcheck:
-    checks:
-      - -ST1000
-      - -ST1003
-      - -ST1020
-      - -ST1021
-      - all
-  testifylint:
-    enable-all: true
-
-issues:
-  max-same-issues: 50
-  exclude-use-default: false
-  exclude-rules:
-    - linters:
-        - gocritic
-      source: //noinspection
-    - linters:
-        - bodyclose
-        - dupl
-        - funlen
-        - gochecknoglobals
-        - goconst
-        - gosec
-        - noctx
-        - wrapcheck
-      path: _test\.go
-    - path: (.+)\.go$
-      text: Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv|.*Rollback). is not checked
-    - path: (.+)\.go$
-      text: should check returned error before deferring
-  exclude-paths:
-    - .cache
-    - \.pb\.go$
-    - _mock\.go$
-    - bin
-    - builtin$
-    - examples$
-    - third_party$
-    - tmp
-    - var
-    - vendor
-
-format:
-  goimports: true
-  exclude-paths:
-    - .cache
-    - \.pb\.go$
-    - _mock\.go$
-    - bin
-    - builtin$
-    - examples$
-    - third_party$
-    - tmp
-    - var
-    - vendor

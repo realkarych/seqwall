@@ -13,19 +13,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4.2.2
-
-      - name: Setup Go
+      - uses: actions/checkout@v4.2.2
+      - name: Set up Go
         uses: actions/setup-go@v5.4.0
         with:
           go-version-file: go.mod
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v7.0.0
+      - name: Cache Go modules
+        uses: actions/cache@v4.2.3
         with:
-          version: v2.1.5
-          args: --timeout=5m
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-gomod-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-gomod-
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: v1.64.8
+          args: --config=.golangci.yml ./...
 
   unit-test:
     name: Unit tests (${{ matrix.os }})

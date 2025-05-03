@@ -45,8 +45,9 @@ go-test:
 
 ## Run linters (golangci-lint)
 lint:
-	@echo "==> Running linters..."
-	golangci-lint run
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0 \
+		run --config=.golangci.yml \
+		./...
 
 ## Generate coverage report
 coverage:
