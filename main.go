@@ -54,33 +54,45 @@ func newRootCmd() *cobra.Command {
 
 func newStaircaseCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "staircase",
-		Short: "Launch staircase testing",
-		Long:  "Launch staircase testing",
-		PreRunE: func(cmd *cobra.Command, _ []string) error {
-			if postgresURL == "" {
-				postgresURL = os.Getenv("DATABASE_URL")
-			}
-			if postgresURL == "" {
-				return seqwall.ErrPostgresURLRequired()
-			}
-			return nil
-		},
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			worker := seqwall.NewStaircaseWorker(
-				migrationsPath,
-				compareSchemaSnapshots,
-				depth,
-				upgradeCmd,
-				downgradeCmd,
-				postgresURL,
-				schemas,
-				migrationsExtension,
-			)
-			return worker.Run()
-		},
+		Use:     "staircase",
+		Short:   "Launch staircase testing",
+		Long:    "Launch staircase testing",
+		PreRunE: invalidateOptions,
+		RunE:    staircaseRun,
 	}
 
+	bindStaircaseFlags(cmd)
+	markRequired(cmd, "migrations-path", "upgrade", "downgrade")
+	cmd.Flags().SortFlags = false
+
+	return cmd
+}
+
+func invalidateOptions(cmd *cobra.Command, _ []string) error {
+	if postgresURL == "" {
+		postgresURL = os.Getenv("DATABASE_URL")
+	}
+	if postgresURL == "" {
+		return seqwall.ErrPostgresURLRequired()
+	}
+	return nil
+}
+
+func staircaseRun(cmd *cobra.Command, _ []string) error {
+	worker := seqwall.NewStaircaseWorker(
+		migrationsPath,
+		compareSchemaSnapshots,
+		depth,
+		upgradeCmd,
+		downgradeCmd,
+		postgresURL,
+		schemas,
+		migrationsExtension,
+	)
+	return worker.Run()
+}
+
+func bindStaircaseFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(
 		&postgresURL,
 		"postgres-url",
@@ -129,10 +141,6 @@ func newStaircaseCmd() *cobra.Command {
 		".sql",
 		"Extension of migration files",
 	)
-
-	markRequired(cmd, "migrations-path", "upgrade", "downgrade")
-	cmd.Flags().SortFlags = false
-	return cmd
 }
 
 func markRequired(cmd *cobra.Command, names ...string) {

@@ -308,91 +308,85 @@ func (s *StaircaseWorker) scanTables(snapshot *driver.SchemaSnapshot) error {
 }
 
 func (s *StaircaseWorker) scanColumns(snapshot *driver.SchemaSnapshot) error {
-	columnsQuery := fmt.Sprintf(
-		`
-            SELECT
-                table_name,
-                column_name,
-                data_type,
-                udt_name,
-                datetime_precision,
-                is_nullable,
-                collation_name,
-                is_identity,
-                identity_generation,
-                is_generated,
-                generation_expression,
-                column_default,
-                character_maximum_length,
-                numeric_precision,
-                numeric_scale
-            FROM information_schema.columns
-            WHERE %s
-            ORDER BY table_name, ordinal_position;
-        `,
-		s.buildSchemaCond("table_schema"),
-	)
-	colRows, err := s.dbClient.Execute(columnsQuery)
+	query := s.buildColumnsQuery()
+	rows, err := s.dbClient.Execute(query)
 	if err != nil {
 		return fmt.Errorf("query columns: %w", err)
 	}
-	defer colRows.Rows.Close()
-
-	for colRows.Rows.Next() {
-		var (
-			tableName, columnName, dataType, udtName         string
-			isNullable, isIdentity, isGenerated              string
-			dateTimePrec                                     sql.NullInt64
-			columnDefault, collationName, identityGeneration sql.NullString
-			generationExpression                             sql.NullString
-			charMaxLen, numPrecision, numScale               sql.NullInt64
-		)
-		if err := colRows.Rows.Scan(
-			&tableName,
-			&columnName,
-			&dataType,
-			&udtName,
-			&dateTimePrec,
-			&isNullable,
-			&collationName,
-			&isIdentity,
-			&identityGeneration,
-			&isGenerated,
-			&generationExpression,
-			&columnDefault,
-			&charMaxLen,
-			&numPrecision,
-			&numScale,
-		); err != nil {
-			return fmt.Errorf("scan column row: %w", err)
+	defer rows.Rows.Close()
+	for rows.Rows.Next() {
+		colDef, tableName, err := scanColumnRow(rows)
+		if err != nil {
+			return err
 		}
-
-		colDef := driver.ColumnDefinition{
-			ColumnName:             columnName,
-			DataType:               dataType,
-			UDTName:                udtName,
-			DateTimePrecision:      dateTimePrec,
-			IsNullable:             isNullable,
-			ColumnDefault:          columnDefault,
-			CharacterMaximumLength: charMaxLen,
-			NumericPrecision:       numPrecision,
-			NumericScale:           numScale,
-			IsIdentity:             isIdentity,
-			IdentityGeneration:     identityGeneration,
-			IsGenerated:            isGenerated,
-			GenerationExpression:   generationExpression,
-			CollationName:          collationName,
-		}
-
 		td := snapshot.Tables[tableName]
 		td.Columns = append(td.Columns, colDef)
 		snapshot.Tables[tableName] = td
 	}
-	if err := colRows.Rows.Err(); err != nil {
+
+	if err := rows.Rows.Err(); err != nil {
 		return fmt.Errorf("iterate column rows: %w", err)
 	}
-
 	return nil
+}
+
+func (s *StaircaseWorker) buildColumnsQuery() string {
+	return fmt.Sprintf(`
+        SELECT
+            table_name,
+            column_name,
+            data_type,
+            udt_name,
+            datetime_precision,
+            is_nullable,
+            collation_name,
+            is_identity,
+            identity_generation,
+            is_generated,
+            generation_expression,
+            column_default,
+            character_maximum_length,
+            numeric_precision,
+            numeric_scale
+        FROM information_schema.columns
+        WHERE %s
+        ORDER BY table_name, ordinal_position;
+    `, s.buildSchemaCond("table_schema"))
+}
+
+func scanColumnRow(rows *driver.QueryResult) (driver.ColumnDefinition, string, error) {
+	var (
+		table, name, dtype, udt       string
+		nullable, identity, generated string
+		dtp                           sql.NullInt64
+		def, coll, idGen, genExpr     sql.NullString
+		charLen, numPrec, numScale    sql.NullInt64
+	)
+	if err := rows.Rows.Scan(
+		&table, &name, &dtype, &udt, &dtp, &nullable, &coll,
+		&identity, &idGen, &generated, &genExpr, &def,
+		&charLen, &numPrec, &numScale,
+	); err != nil {
+		return driver.ColumnDefinition{}, "", fmt.Errorf("scan column row: %w", err)
+	}
+	col := driver.ColumnDefinition{
+		ColumnName:             name,
+		DataType:               dtype,
+		UDTName:                udt,
+		DateTimePrecision:      dtp,
+		IsNullable:             nullable,
+		ColumnDefault:          def,
+		CharacterMaximumLength: charLen,
+		NumericPrecision:       numPrec,
+		NumericScale:           numScale,
+		IsIdentity:             identity,
+		IdentityGeneration:     idGen,
+		IsGenerated:            generated,
+		GenerationExpression:   genExpr,
+		CollationName:          coll,
+	}
+
+	return col, table, nil
 }
 
 func (s *StaircaseWorker) scanViews(snapshot *driver.SchemaSnapshot) error {
