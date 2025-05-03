@@ -97,7 +97,7 @@ func (s *StaircaseWorker) actualiseDb(migrations []string) error {
 			log.Println("Migration output:", out)
 		}
 
-		// After applying each migration, take an etalon snapshot of the schema
+		// After applying each migration, take an etalon snapshot of the schema.
 		if snap, err := s.makeSchemaSnapshot(); err != nil {
 			return fmt.Errorf("snapshot after %q: %w", migration, err)
 		} else {
@@ -771,8 +771,8 @@ func (s *StaircaseWorker) compareSchemas(before, after *driver.SchemaSnapshot) e
 	return nil
 }
 
-// buildSchemaCond("table_schema") -> "table_schema = 'public'"
-// buildSchemaCond("tc.table_schema") -> "tc.table_schema IN ('public','extra')"
+// buildSchemaCond("table_schema") -> "table_schema = 'public'".
+// buildSchemaCond("tc.table_schema") -> "tc.table_schema IN ('public','extra')".
 func (s *StaircaseWorker) buildSchemaCond(col string) string {
 	list := s.schemas
 	if len(list) == 0 {
