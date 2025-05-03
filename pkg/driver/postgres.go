@@ -8,8 +8,8 @@ import (
 )
 
 type QueryResult struct {
-	Rows   *sql.Rows
 	Result sql.Result
+	Rows   *sql.Rows
 }
 
 type DbClient interface {
@@ -21,14 +21,14 @@ type ColumnDefinition struct {
 	ColumnName             string
 	DataType               string
 	UDTName                string
-	DateTimePrecision      sql.NullInt64
 	IsNullable             string
-	CollationName          sql.NullString
 	IsIdentity             string
-	IdentityGeneration     sql.NullString
 	IsGenerated            string
+	CollationName          sql.NullString
+	IdentityGeneration     sql.NullString
 	GenerationExpression   sql.NullString
 	ColumnDefault          sql.NullString
+	DateTimePrecision      sql.NullInt64
 	CharacterMaximumLength sql.NullInt64
 	NumericPrecision       sql.NullInt64
 	NumericScale           sql.NullInt64

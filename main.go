@@ -15,14 +15,14 @@ const (
 )
 
 type StaircaseOptions struct {
-	MigrationsPath         string
-	CompareSchemaSnapshots bool
-	Depth                  int
-	UpgradeCmd             string
-	DowngradeCmd           string
-	PostgresURL            string
-	Schemas                []string
-	MigrationsExtension    string
+	Schemas                []string // Schemas to test.
+	MigrationsPath         string   // Path to migrations.
+	UpgradeCmd             string   // Shell command to apply a migration.
+	DowngradeCmd           string   // Shell command to revert a migration.
+	PostgresURL            string   // PostgreSQL connection URL.
+	MigrationsExtension    string   // Extension of migration files.
+	Depth                  int      // Depth of staircase testing.
+	CompareSchemaSnapshots bool     // Compare schema snapshots after each step.
 }
 
 func main() {
