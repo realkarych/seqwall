@@ -19,8 +19,8 @@ const (
 )
 
 type StaircaseWorker struct {
-	dbClient               *driver.PostgresClient
-	baseline               map[string]*driver.SchemaSnapshot
+	dbClient               *driver.PostgresClient            `json:"-"`
+	baseline               map[string]*driver.SchemaSnapshot `json:"-"`
 	migrationsPath         string
 	upgradeCmd             string
 	downgradeCmd           string
@@ -260,7 +260,7 @@ func (s *StaircaseWorker) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		ForeignKeys: make(map[string]driver.ForeignKeyDefinition),
 	}
 	type scanFn struct {
-		fn   func(*driver.SchemaSnapshot) error
+		fn   func(*driver.SchemaSnapshot) error `json:"-"`
 		name string
 	}
 	scanners := []scanFn{
