@@ -18,10 +18,17 @@ type DbClient interface {
 	Close() error
 }
 
+type TypeMeta struct {
+	Typtype     string
+	Typcategory string
+	TypeOID     int
+}
+
 type ColumnDefinition struct {
 	ColumnName             string         `db:"column_name"              json:"column_name"`
 	DataType               string         `db:"data_type"                json:"data_type"`
 	UDTName                string         `db:"udt_name"                 json:"udt_name"`
+	TypeMeta               TypeMeta       `db:"type_meta"                json:"type_meta"`
 	IsNullable             string         `db:"is_nullable"              json:"is_nullable"`
 	IsIdentity             string         `db:"is_identity"              json:"is_identity"`
 	IsGenerated            string         `db:"is_generated"             json:"is_generated"`

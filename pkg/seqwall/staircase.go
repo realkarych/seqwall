@@ -337,39 +337,51 @@ func (s *StaircaseWorker) scanColumns(snapshot *driver.SchemaSnapshot) error {
 func (s *StaircaseWorker) buildColumnsQuery() string {
 	return fmt.Sprintf(`
         SELECT
-            table_name,
-            column_name,
-            data_type,
-            udt_name,
-            datetime_precision,
-            is_nullable,
-            collation_name,
-            is_identity,
-            identity_generation,
-            is_generated,
-            generation_expression,
-            column_default,
-            character_maximum_length,
-            numeric_precision,
-            numeric_scale
-        FROM information_schema.columns
+            c.table_name,
+            c.column_name,
+            c.data_type,
+            c.udt_name,
+            t.typtype,
+            t.typcategory,
+            CASE WHEN t.typtype = 'e' THEN 0 ELSE a.atttypid END AS type_oid,
+            c.datetime_precision,
+            c.is_nullable,
+            c.collation_name,
+            c.is_identity,
+            c.identity_generation,
+            c.is_generated,
+            c.generation_expression,
+            c.column_default,
+            c.character_maximum_length,
+            c.numeric_precision,
+            c.numeric_scale
+        FROM information_schema.columns c
+        JOIN pg_catalog.pg_type t
+            ON c.udt_name = t.typname
+        JOIN pg_catalog.pg_attribute a
+            ON a.attrelid = (c.table_schema||'.'||c.table_name)::regclass
+            AND a.attname = c.column_name
         WHERE %s
-        ORDER BY table_name, ordinal_position;
-    `, s.buildSchemaCond("table_schema"))
+        ORDER BY c.table_name, c.ordinal_position;
+    `, s.buildSchemaCond("c.table_schema"))
 }
 
 func scanColumnRow(rows *driver.QueryResult) (driver.ColumnDefinition, string, error) {
 	var (
 		table, name, dtype, udt       string
-		nullable, identity, generated string
+		typtype, typcategory          string
+		typeOID                       int
 		dtp                           sql.NullInt64
-		def, coll, idGen, genExpr     sql.NullString
+		nullable, identity, generated string
+		genExpr, def, coll, idGen     sql.NullString
 		charLen, numPrec, numScale    sql.NullInt64
 	)
 	if err := rows.Rows.Scan(
-		&table, &name, &dtype, &udt, &dtp, &nullable, &coll,
-		&identity, &idGen, &generated, &genExpr, &def,
-		&charLen, &numPrec, &numScale,
+		&table, &name, &dtype, &udt,
+		&typtype, &typcategory, &typeOID,
+		&dtp, &nullable, &coll,
+		&identity, &idGen, &generated, &genExpr,
+		&def, &charLen, &numPrec, &numScale,
 	); err != nil {
 		return driver.ColumnDefinition{}, "", fmt.Errorf("scan column row: %w", err)
 	}
@@ -388,8 +400,12 @@ func scanColumnRow(rows *driver.QueryResult) (driver.ColumnDefinition, string, e
 		IsGenerated:            generated,
 		GenerationExpression:   genExpr,
 		CollationName:          coll,
+		TypeMeta: driver.TypeMeta{
+			Typtype:     typtype,
+			Typcategory: typcategory,
+			TypeOID:     typeOID,
+		},
 	}
-
 	return col, table, nil
 }
 
