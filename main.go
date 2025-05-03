@@ -130,10 +130,15 @@ func newStaircaseCmd() *cobra.Command {
 		"Extension of migration files",
 	)
 
-	_ = cmd.MarkFlagRequired("migrations-path")
-	_ = cmd.MarkFlagRequired("upgrade")
-	_ = cmd.MarkFlagRequired("downgrade")
-
+	markRequired(cmd, "migrations-path", "upgrade", "downgrade")
 	cmd.Flags().SortFlags = false
 	return cmd
+}
+
+func markRequired(cmd *cobra.Command, names ...string) {
+	for _, name := range names {
+		if err := cmd.MarkFlagRequired(name); err != nil {
+			panic(fmt.Sprintf("internal: flag %q should be declared above: %v", name, err))
+		}
+	}
 }
