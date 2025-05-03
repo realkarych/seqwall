@@ -728,47 +728,55 @@ func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 	return nil
 }
 
-func (s *StaircaseWorker) compareSchemas(before, after *driver.SchemaSnapshot) error {
-	normalize := func(src map[string]driver.ConstraintDefinition) map[string]driver.ConstraintDefinition {
-		res := make(map[string]driver.ConstraintDefinition)
-		re := regexp.MustCompile(`^([A-Za-z0-9_]+)\s+IS\s+NOT\s+NULL$`)
-		for _, c := range src {
-			if c.ConstraintType == "CHECK" && c.Definition.Valid {
-				if m := re.FindStringSubmatch(c.Definition.String); len(m) == 2 {
-					k := c.TableName + "_" + m[1] + "_not_null"
-					res[k] = c
-					continue
-				}
+func normalizeConstraints(src map[string]driver.ConstraintDefinition) map[string]driver.ConstraintDefinition {
+	res := make(map[string]driver.ConstraintDefinition)
+	re := regexp.MustCompile(`^([A-Za-z0-9_]+)\s+IS\s+NOT\s+NULL$`)
+	for _, c := range src {
+		if c.ConstraintType == "CHECK" && c.Definition.Valid {
+			if m := re.FindStringSubmatch(c.Definition.String); len(m) == 2 {
+				k := c.TableName + "_" + m[1] + "_not_null"
+				res[k] = c
+				continue
 			}
 		}
-		for k, c := range src {
-			if c.ConstraintType == "CHECK" && c.Definition.Valid {
-				if re.MatchString(c.Definition.String) {
-					continue
-				}
-			}
-			res[k] = c
+	}
+	for k, c := range src {
+		if c.ConstraintType == "CHECK" && c.Definition.Valid && re.MatchString(c.Definition.String) {
+			continue
 		}
-		return res
+		res[k] = c
 	}
-	before.Constraints = normalize(before.Constraints)
-	after.Constraints = normalize(after.Constraints)
-	b, err := json.MarshalIndent(before, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal before: %w", err)
-	}
-	a, err := json.MarshalIndent(after, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal after: %w", err)
-	}
-	diff := difflib.UnifiedDiff{
-		A:        difflib.SplitLines(string(b)),
-		B:        difflib.SplitLines(string(a)),
+	return res
+}
+
+func marshalSnapshot(snap *driver.SchemaSnapshot) ([]byte, error) {
+	return json.MarshalIndent(snap, "", "  ")
+}
+
+func diffJson(a, b []byte) (string, error) {
+	d := difflib.UnifiedDiff{
+		A:        difflib.SplitLines(string(a)),
+		B:        difflib.SplitLines(string(b)),
 		FromFile: "Snapshot Before",
 		ToFile:   "Snapshot After",
 		Context:  3,
 	}
-	out, err := difflib.GetUnifiedDiffString(diff)
+	return difflib.GetUnifiedDiffString(d)
+}
+
+func (s *StaircaseWorker) compareSchemas(before, after *driver.SchemaSnapshot) error {
+	before.Constraints = normalizeConstraints(before.Constraints)
+	after.Constraints = normalizeConstraints(after.Constraints)
+
+	b, err := marshalSnapshot(before)
+	if err != nil {
+		return fmt.Errorf("marshal before: %w", err)
+	}
+	a, err := marshalSnapshot(after)
+	if err != nil {
+		return fmt.Errorf("marshal after: %w", err)
+	}
+	out, err := diffJson(b, a)
 	if err != nil {
 		return fmt.Errorf("diff: %w", err)
 	}
