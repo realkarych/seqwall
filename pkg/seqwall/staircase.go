@@ -247,7 +247,7 @@ func (s *StaircaseWorker) calculateStairDepth(migrations []string) int {
 }
 
 func (s *StaircaseWorker) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
-	snapshot := &driver.SchemaSnapshot{
+	snap := &driver.SchemaSnapshot{
 		Tables:      make(map[string]driver.TableDefinition),
 		Views:       make(map[string]driver.ViewDefinition),
 		Indexes:     make(map[string]driver.IndexDefinition),
@@ -255,37 +255,28 @@ func (s *StaircaseWorker) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		EnumTypes:   make(map[string]driver.EnumDefinition),
 		ForeignKeys: make(map[string]driver.ForeignKeyDefinition),
 	}
-	if err := s.scanTables(snapshot); err != nil {
-		return nil, fmt.Errorf("scan tables: %w", err)
+	type scanFn struct {
+		name string
+		fn   func(*driver.SchemaSnapshot) error
 	}
-	if err := s.scanColumns(snapshot); err != nil {
-		return nil, fmt.Errorf("scan columns: %w", err)
+	scanners := []scanFn{
+		{"tables", s.scanTables},
+		{"columns", s.scanColumns},
+		{"constraints", s.scanConstraints},
+		{"enums", s.scanEnums},
+		{"foreign keys", s.scanFks},
+		{"functions", s.scanFunctions},
+		{"indexes", s.scanIndexes},
+		{"sequences", s.scanSeqs},
+		{"triggers", s.scanTriggers},
+		{"views", s.scanViews},
 	}
-	if err := s.scanConstraints(snapshot); err != nil {
-		return nil, fmt.Errorf("scan constraints: %w", err)
+	for _, sc := range scanners {
+		if err := sc.fn(snap); err != nil {
+			return nil, fmt.Errorf("scan %s: %w", sc.name, err)
+		}
 	}
-	if err := s.scanEnums(snapshot); err != nil {
-		return nil, fmt.Errorf("scan enums: %w", err)
-	}
-	if err := s.scanFks(snapshot); err != nil {
-		return nil, fmt.Errorf("scan foreign keys: %w", err)
-	}
-	if err := s.scanFunctions(snapshot); err != nil {
-		return nil, fmt.Errorf("scan functions: %w", err)
-	}
-	if err := s.scanIndexes(snapshot); err != nil {
-		return nil, fmt.Errorf("scan indexes: %w", err)
-	}
-	if err := s.scanSeqs(snapshot); err != nil {
-		return nil, fmt.Errorf("scan sequences: %w", err)
-	}
-	if err := s.scanTriggers(snapshot); err != nil {
-		return nil, fmt.Errorf("scan triggers: %w", err)
-	}
-	if err := s.scanViews(snapshot); err != nil {
-		return nil, fmt.Errorf("scan views: %w", err)
-	}
-	return snapshot, nil
+	return snap, nil
 }
 
 func (s *StaircaseWorker) scanTables(snapshot *driver.SchemaSnapshot) error {
