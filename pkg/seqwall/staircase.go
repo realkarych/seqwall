@@ -108,9 +108,60 @@ func (s *StaircaseWorker) actualiseDb(migrations []string) error {
 	return nil
 }
 
+func (s *StaircaseWorker) compareAndSnapshot(
+	expected *driver.SchemaSnapshot,
+	errCtx string,
+) error {
+	if !s.compareSchemaSnapshots || expected == nil {
+		return nil
+	}
+	snap, err := s.makeSchemaSnapshot()
+	if err != nil {
+		return fmt.Errorf("%s: %w", errCtx, err)
+	}
+	if err := s.compareSchemas(expected, snap); err != nil {
+		return fmt.Errorf("%s: %w", errCtx, err)
+	}
+	return nil
+}
+
+func (s *StaircaseWorker) runStep(
+	migration string,
+	step int,
+	baseCur, basePrev *driver.SchemaSnapshot,
+) error {
+	// 1) down
+	if err := s.makeDownStep(migration, step); err != nil {
+		return fmt.Errorf("down step %q: %w", migration, err)
+	}
+	if err := s.compareAndSnapshot(basePrev,
+		fmt.Sprintf("snapshot after first down %q", migration)); err != nil {
+		return err
+	}
+
+	// 2) up
+	if err := s.makeUpStep(migration, step); err != nil {
+		return fmt.Errorf("up step %q: %w", migration, err)
+	}
+	if err := s.compareAndSnapshot(baseCur,
+		fmt.Sprintf("snapshot after down‑up %q", migration)); err != nil {
+		return err
+	}
+
+	// 3) final down
+	if err := s.makeDownStep(migration, step); err != nil {
+		return fmt.Errorf("final down step %q: %w", migration, err)
+	}
+	if err := s.compareAndSnapshot(basePrev,
+		fmt.Sprintf("snapshot after final down %q", migration)); err != nil {
+		return err
+	}
+	log.Printf("Final Down test passed for %s", migration)
+	return nil
+}
+
 func (s *StaircaseWorker) processDownUpDown(migrations []string) error {
 	steps := s.calculateStairDepth(migrations)
-
 	for i := 1; i <= steps; i++ {
 		migration := migrations[len(migrations)-i]
 		baseCur, ok := s.baseline[migration]
@@ -121,50 +172,8 @@ func (s *StaircaseWorker) processDownUpDown(migrations []string) error {
 		if idx := len(migrations) - i - 1; idx >= 0 {
 			basePrev = s.baseline[migrations[idx]]
 		}
-
-		// 1) Downgrade
-		if err := s.makeDownStep(migration, i); err != nil {
-			return fmt.Errorf("down step %q: %w", migration, err)
-		}
-		if s.compareSchemaSnapshots {
-			snapAfterDown, err := s.makeSchemaSnapshot()
-			if err != nil {
-				return fmt.Errorf("snapshot after first down %q: %w", migration, err)
-			}
-			if basePrev != nil {
-				if err := s.compareSchemas(basePrev, snapAfterDown); err != nil {
-					return fmt.Errorf("compare first down %q with baseline prev: %w", migration, err)
-				}
-			}
-		}
-
-		// 2) Upgrade
-		if err := s.makeUpStep(migration, i); err != nil {
-			return fmt.Errorf("up step %q: %w", migration, err)
-		}
-		if s.compareSchemaSnapshots {
-			snapAfterUp, err := s.makeSchemaSnapshot()
-			if err != nil {
-				return fmt.Errorf("snapshot after down-up %q: %w", migration, err)
-			}
-			if err := s.compareSchemas(baseCur, snapAfterUp); err != nil {
-				return fmt.Errorf("compare down-up %q with baseline cur: %w", migration, err)
-			}
-		}
-
-		// 3) Step down the stairs
-		if err := s.makeDownStep(migration, i); err != nil {
-			return fmt.Errorf("final down step %q: %w", migration, err)
-		}
-		if s.compareSchemaSnapshots && basePrev != nil {
-			snapAfterFinalDown, err := s.makeSchemaSnapshot()
-			if err != nil {
-				return fmt.Errorf("snapshot after final down %q: %w", migration, err)
-			}
-			if err := s.compareSchemas(basePrev, snapAfterFinalDown); err != nil {
-				return fmt.Errorf("compare final down %q with baseline prev: %w", migration, err)
-			}
-			log.Printf("Final Down test passed for %s", migration)
+		if err := s.runStep(migration, i, baseCur, basePrev); err != nil {
+			return err
 		}
 	}
 	log.Println("Step 2 (down-up-down) completed successfully!")
