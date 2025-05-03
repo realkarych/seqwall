@@ -15,16 +15,16 @@ import (
 )
 
 type StaircaseWorker struct {
-	dbClient               *driver.PostgresClient            // DB client for executing queries.
-	baseline               map[string]*driver.SchemaSnapshot // Etalon snapshots.
-	schemas                []string                          // List of schemas to be processed.
-	migrationsPath         string                            // Path to the directory with migration files.
-	upgradeCmd             string                            // Command to run upgrade for single migration.
-	downgradeCmd           string                            // Command to run downgrade for single migration.
-	postgresUrl            string                            // Connection string for PostgreSQL. For example: "postgres://user:password@localhost:5432/dbname".
-	migrationsExtension    string                            // Extension for migration files.
-	depth                  int                               // Number of steps in the staircase. If 0, all migrations will be processed.
-	compareSchemaSnapshots bool                              // If true, compare schema before and after migration. If false, only run migrations.
+	dbClient               *driver.PostgresClient
+	baseline               map[string]*driver.SchemaSnapshot
+	migrationsPath         string
+	upgradeCmd             string
+	downgradeCmd           string
+	postgresUrl            string
+	migrationsExtension    string
+	schemas                []string
+	depth                  int
+	compareSchemaSnapshots bool
 }
 
 func NewStaircaseWorker(
@@ -256,20 +256,20 @@ func (s *StaircaseWorker) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		ForeignKeys: make(map[string]driver.ForeignKeyDefinition),
 	}
 	type scanFn struct {
-		name string
 		fn   func(*driver.SchemaSnapshot) error
+		name string
 	}
 	scanners := []scanFn{
-		{"tables", s.scanTables},
-		{"columns", s.scanColumns},
-		{"constraints", s.scanConstraints},
-		{"enums", s.scanEnums},
-		{"foreign keys", s.scanFks},
-		{"functions", s.scanFunctions},
-		{"indexes", s.scanIndexes},
-		{"sequences", s.scanSeqs},
-		{"triggers", s.scanTriggers},
-		{"views", s.scanViews},
+		{s.scanTables, "tables"},
+		{s.scanColumns, "columns"},
+		{s.scanConstraints, "constraints"},
+		{s.scanEnums, "enums"},
+		{s.scanFks, "foreign keys"},
+		{s.scanFunctions, "functions"},
+		{s.scanIndexes, "indexes"},
+		{s.scanSeqs, "sequences"},
+		{s.scanTriggers, "triggers"},
+		{s.scanViews, "views"},
 	}
 	for _, sc := range scanners {
 		if err := sc.fn(snap); err != nil {
@@ -694,7 +694,9 @@ func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 			minValue, maxValue, increment      string
 			cycleOption                        string
 		)
-		if err := rows.Rows.Scan(&sequenceName, &dataType, &startValue, &minValue, &maxValue, &increment, &cycleOption); err != nil {
+		if err := rows.Rows.Scan(
+			&sequenceName, &dataType, &startValue, &minValue, &maxValue, &increment, &cycleOption,
+		); err != nil {
 			return fmt.Errorf("scan sequence row: %w", err)
 		}
 		snapshot.Sequences[sequenceName] = driver.SequenceDefinition{
