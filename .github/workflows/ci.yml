@@ -36,6 +36,7 @@ jobs:
   unit-test:
     name: Unit tests (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    needs: lint
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -60,7 +61,7 @@ jobs:
         run: make go-test
 
   staircase:
-    name: Staircase tests (PostgreSQL ${{ matrix.pg }})
+    name: Staircase tests (PostgreSQL ${{ matrix.pg }})
     runs-on: ubuntu-latest
     needs: lint
 
