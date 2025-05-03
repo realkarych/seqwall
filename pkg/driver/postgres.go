@@ -125,6 +125,10 @@ func (p *PostgresClient) Execute(query string, args ...interface{}) (*QueryResul
 		if err != nil {
 			return nil, err
 		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			return nil, err
+		}
 		return &QueryResult{Rows: rows}, nil
 	} else {
 		result, err := p.conn.Exec(query, args...)
