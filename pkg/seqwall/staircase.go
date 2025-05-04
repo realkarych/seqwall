@@ -2,57 +2,14 @@ package seqwall
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"log"
 	"os/exec"
-	"regexp"
 	"runtime/debug"
 	"strings"
 
-	"github.com/pmezard/go-difflib/difflib"
 	"github.com/realkarych/seqwall/pkg/driver"
 )
-
-const (
-	diffContextLines = 3
-)
-
-type StaircaseWorker struct {
-	dbClient               *driver.PostgresClient            `json:"-"`
-	baseline               map[string]*driver.SchemaSnapshot `json:"-"`
-	migrationsPath         string
-	upgradeCmd             string
-	downgradeCmd           string
-	postgresUrl            string
-	migrationsExtension    string
-	schemas                []string
-	depth                  int
-	compareSchemaSnapshots bool
-}
-
-func NewStaircaseWorker(
-	migrationsPath string,
-	compareSchemaSnapshots bool,
-	depth int,
-	upgradeCmd string,
-	downgradeCmd string,
-	postgresUrl string,
-	schemas []string,
-	migrationsExtension string,
-) *StaircaseWorker {
-	return &StaircaseWorker{
-		migrationsPath:         migrationsPath,
-		compareSchemaSnapshots: compareSchemaSnapshots,
-		depth:                  depth,
-		upgradeCmd:             upgradeCmd,
-		downgradeCmd:           downgradeCmd,
-		postgresUrl:            postgresUrl,
-		baseline:               make(map[string]*driver.SchemaSnapshot),
-		schemas:                schemas,
-		migrationsExtension:    migrationsExtension,
-	}
-}
 
 func (s *StaircaseWorker) Run() error {
 	client, err := driver.NewPostgresClient(s.postgresUrl)
@@ -120,7 +77,7 @@ func (s *StaircaseWorker) compareAndSnapshot(exp *driver.SchemaSnapshot, ctx str
 	if err != nil {
 		return fmt.Errorf("%s: %w", ctx, err)
 	}
-	if err := s.compareSchemas(exp, snap); err != nil {
+	if err := compareSchemas(exp, snap); err != nil {
 		return fmt.Errorf("%s: %w", ctx, err)
 	}
 	return nil
@@ -377,11 +334,24 @@ func scanColumnRow(rows *driver.QueryResult) (driver.ColumnDefinition, string, e
 		charLen, numPrec, numScale    sql.NullInt64
 	)
 	if err := rows.Rows.Scan(
-		&table, &name, &dtype, &udt,
-		&typtype, &typcategory, &typeOID,
-		&dtp, &nullable, &coll,
-		&identity, &idGen, &generated, &genExpr,
-		&def, &charLen, &numPrec, &numScale,
+		&table,
+		&name,
+		&dtype,
+		&udt,
+		&typtype,
+		&typcategory,
+		&typeOID,
+		&dtp,
+		&nullable,
+		&coll,
+		&identity,
+		&idGen,
+		&generated,
+		&genExpr,
+		&def,
+		&charLen,
+		&numPrec,
+		&numScale,
 	); err != nil {
 		return driver.ColumnDefinition{}, "", fmt.Errorf("scan column row: %w", err)
 	}
@@ -427,7 +397,10 @@ func (s *StaircaseWorker) scanViews(snapshot *driver.SchemaSnapshot) error {
 	defer viewRows.Rows.Close()
 	for viewRows.Rows.Next() {
 		var viewName, viewDefinition string
-		if err := viewRows.Rows.Scan(&viewName, &viewDefinition); err != nil {
+		if err := viewRows.Rows.Scan(
+			&viewName,
+			&viewDefinition,
+		); err != nil {
 			return fmt.Errorf("scan view row: %w", err)
 		}
 		snapshot.Views[viewName] = driver.ViewDefinition{Definition: viewDefinition}
@@ -455,7 +428,10 @@ func (s *StaircaseWorker) scanIndexes(snapshot *driver.SchemaSnapshot) error {
 	defer indexRows.Rows.Close()
 	for indexRows.Rows.Next() {
 		var indexName, indexDef string
-		if err := indexRows.Rows.Scan(&indexName, &indexDef); err != nil {
+		if err := indexRows.Rows.Scan(
+			&indexName,
+			&indexDef,
+		); err != nil {
 			return fmt.Errorf("scan index row: %w", err)
 		}
 		snapshot.Indexes[indexName] = driver.IndexDefinition{IndexDef: indexDef}
@@ -532,7 +508,10 @@ func (s *StaircaseWorker) scanEnums(snapshot *driver.SchemaSnapshot) error {
 	defer enumRows.Rows.Close()
 	for enumRows.Rows.Next() {
 		var typeName, enumLabel string
-		if err := enumRows.Rows.Scan(&typeName, &enumLabel); err != nil {
+		if err := enumRows.Rows.Scan(
+			&typeName,
+			&enumLabel,
+		); err != nil {
 			return fmt.Errorf("scan enum row: %w", err)
 		}
 		def := snapshot.EnumTypes[typeName]
@@ -678,7 +657,11 @@ func (s *StaircaseWorker) scanFunctions(snapshot *driver.SchemaSnapshot) error {
 			routineTypeNull sql.NullString
 			returnType      string
 		)
-		if err := rows.Rows.Scan(&routineName, &routineTypeNull, &returnType); err != nil {
+		if err := rows.Rows.Scan(
+			&routineName,
+			&routineTypeNull,
+			&returnType,
+		); err != nil {
 			return fmt.Errorf("scan function row: %w", err)
 		}
 		routineType := ""
@@ -722,7 +705,13 @@ func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 			cycleOption                        string
 		)
 		if err := rows.Rows.Scan(
-			&sequenceName, &dataType, &startValue, &minValue, &maxValue, &increment, &cycleOption,
+			&sequenceName,
+			&dataType,
+			&startValue,
+			&minValue,
+			&maxValue,
+			&increment,
+			&cycleOption,
 		); err != nil {
 			return fmt.Errorf("scan sequence row: %w", err)
 		}
@@ -738,65 +727,6 @@ func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 	}
 	if err := rows.Rows.Err(); err != nil {
 		return fmt.Errorf("iterate sequence rows: %w", err)
-	}
-	return nil
-}
-
-func normalizeConstraints(src map[string]driver.ConstraintDefinition) map[string]driver.ConstraintDefinition {
-	checkNullConstraintSubmatchCount := 2
-	res := make(map[string]driver.ConstraintDefinition)
-	re := regexp.MustCompile(`^([A-Za-z0-9_]+)\s+IS\s+NOT\s+NULL$`)
-	for _, c := range src {
-		if c.ConstraintType == "CHECK" && c.Definition.Valid {
-			if m := re.FindStringSubmatch(c.Definition.String); len(m) == checkNullConstraintSubmatchCount {
-				k := c.TableName + "_" + m[1] + "_not_null"
-				res[k] = c
-				continue
-			}
-		}
-	}
-	for k, c := range src {
-		if c.ConstraintType == "CHECK" && c.Definition.Valid && re.MatchString(c.Definition.String) {
-			continue
-		}
-		res[k] = c
-	}
-	return res
-}
-
-func marshalSnapshot(snap *driver.SchemaSnapshot) ([]byte, error) {
-	return json.MarshalIndent(snap, "", "  ")
-}
-
-func diffJson(a, b []byte) (string, error) {
-	d := difflib.UnifiedDiff{
-		A:        difflib.SplitLines(string(a)),
-		B:        difflib.SplitLines(string(b)),
-		FromFile: "Snapshot Before",
-		ToFile:   "Snapshot After",
-		Context:  diffContextLines,
-	}
-	return difflib.GetUnifiedDiffString(d)
-}
-
-func (s *StaircaseWorker) compareSchemas(before, after *driver.SchemaSnapshot) error {
-	before.Constraints = normalizeConstraints(before.Constraints)
-	after.Constraints = normalizeConstraints(after.Constraints)
-
-	b, err := marshalSnapshot(before)
-	if err != nil {
-		return fmt.Errorf("marshal before: %w", err)
-	}
-	a, err := marshalSnapshot(after)
-	if err != nil {
-		return fmt.Errorf("marshal after: %w", err)
-	}
-	out, err := diffJson(b, a)
-	if err != nil {
-		return fmt.Errorf("diff: %w", err)
-	}
-	if out != "" {
-		return fmt.Errorf("%w:\n%s", ErrSnapshotsDiffer(), out)
 	}
 	return nil
 }
