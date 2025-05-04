@@ -57,7 +57,7 @@ go install github.com/realkarych/seqwall@latest
 
 ### ✅ Once installed, verify it works
 
-```shell
+```
 ❯ seqwall staircase --help
 Launch staircase testing
 
