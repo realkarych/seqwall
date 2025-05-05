@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	_ "github.com/lib/pq"
 )
 
 type PostgresClient struct {

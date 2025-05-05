@@ -12,7 +12,7 @@ import (
 )
 
 func (s *StaircaseWorker) Run() error {
-	client, err := driver.NewPostgresClient(s.postgresUrl)
+	client, err := driver.NewPostgresClient(s.postgresURL)
 	if err != nil {
 		return fmt.Errorf("connect postgres: %w", err)
 	}
@@ -51,19 +51,16 @@ func (s *StaircaseWorker) processStaircase(migrations []string) error {
 func (s *StaircaseWorker) actualiseDb(migrations []string) error {
 	for i, migration := range migrations {
 		log.Printf("Running migration %d/%d: %s", i+1, len(migrations), migration)
-
-		if out, err := s.executeCommand(s.upgradeCmd, migration); err != nil {
+		out, err := s.executeCommand(s.upgradeCmd, migration)
+		if err != nil {
 			return fmt.Errorf("apply migration %q (step %d): %w", migration, i+1, err)
-		} else {
-			log.Println("Migration output:", out)
 		}
-
-		// After applying each migration, take an etalon snapshot of the schema.
-		if snap, err := s.makeSchemaSnapshot(); err != nil {
+		log.Println("Migration output:", out)
+		snap, err := s.makeSchemaSnapshot()
+		if err != nil {
 			return fmt.Errorf("snapshot after %q: %w", migration, err)
-		} else {
-			s.baseline[migration] = snap
 		}
+		s.baseline[migration] = snap
 	}
 	log.Println("Step 1 (actualise db) completed successfully!")
 	return nil

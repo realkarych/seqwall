@@ -12,7 +12,7 @@ type StaircaseWorker struct {
 	migrationsPath         string
 	upgradeCmd             string
 	downgradeCmd           string
-	postgresUrl            string
+	postgresURL            string
 	migrationsExtension    string
 	schemas                []string
 	depth                  int
@@ -25,7 +25,7 @@ func NewStaircaseWorker(
 	depth int,
 	upgradeCmd string,
 	downgradeCmd string,
-	postgresUrl string,
+	postgresURL string,
 	schemas []string,
 	migrationsExtension string,
 ) *StaircaseWorker {
@@ -35,7 +35,7 @@ func NewStaircaseWorker(
 		depth:                  depth,
 		upgradeCmd:             upgradeCmd,
 		downgradeCmd:           downgradeCmd,
-		postgresUrl:            postgresUrl,
+		postgresURL:            postgresURL,
 		baseline:               make(map[string]*driver.SchemaSnapshot),
 		schemas:                schemas,
 		migrationsExtension:    migrationsExtension,
