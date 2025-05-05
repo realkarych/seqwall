@@ -17,7 +17,7 @@ func marshalSnapshot(snap *driver.SchemaSnapshot) ([]byte, error) {
 	return json.MarshalIndent(snap, "", "  ")
 }
 
-func diffJson(a, b []byte) (string, error) {
+func diffJSON(a, b []byte) (string, error) {
 	d := difflib.UnifiedDiff{
 		A:        difflib.SplitLines(string(a)),
 		B:        difflib.SplitLines(string(b)),
@@ -39,7 +39,7 @@ func compareSchemas(before, after *driver.SchemaSnapshot) error {
 	if err != nil {
 		return fmt.Errorf("marshal after: %w", err)
 	}
-	out, err := diffJson(b, a)
+	out, err := diffJSON(b, a)
 	if err != nil {
 		return fmt.Errorf("diff: %w", err)
 	}

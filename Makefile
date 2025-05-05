@@ -8,7 +8,7 @@ PGPORT ?= 5432
 PG_VERS ?= 15
 TEST_IMAGE ?= seqwall-test
 
-.PHONY: all build ls test docker-build docker-test go-test lint coverage clean help
+.PHONY: all build ls test docker-build docker-test go-test lint format coverage clean help
 
 ## Default target
 all: help
@@ -45,8 +45,17 @@ go-test:
 
 ## Run linters (golangci-lint)
 lint:
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.61.0 \
-		run --config=.golangci.yml \
+	@echo "==> Running linters..."
+	golangci-lint run --timeout 5m \
+		--config=.golangci.yml \
+		./...
+
+## Run formatters (golangci-lint)
+format:
+	@echo "==> Formatting..."
+	golangci-lint run --timeout 5m \
+		--config=.golangci.yml \
+		--fix \
 		./...
 
 ## Generate coverage report
@@ -71,6 +80,7 @@ help:
 	@echo "  test         - Run staircase tests in Docker"
 	@echo "  go-test      - Run unit tests"
 	@echo "  lint         - Run golangci-lint"
+	@echo "  format       - Run formatters (golangci-lint)"
 	@echo "  coverage     - Generate coverage report (coverage.out, coverage.html)"
 	@echo "  clean        - Remove build artifacts"
 	@echo "  help         - Show this help"

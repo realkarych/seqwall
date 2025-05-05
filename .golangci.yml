@@ -1,138 +1,28 @@
----
-
-run:
-  concurrency: 8
-  timeout: 10m
-  issues-exit-code: 1
-  tests: true
-
-issues:
-  exclude-dirs:
-    - bin
-    - vendor
-  exclude:
-    - Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*printf?|os\.(Un)?Setenv|.*Rollback). is not checked
-    - should check returned error before deferring
-  exclude-rules:
-    - source: "//noinspection"
-      linters:
-        - gocritic
-    - path: "_test\\.go"
-      linters:
-        - err113
-        - dupl
-        - funlen
-        - goconst
-        - gochecknoglobals
-        - gosec
-        - noctx
-  max-same-issues: 50
-  exclude-use-default: false
-
-linters-settings:
-  revive:
-    confidence: 0.1
-    rules:
-      - name: exported
-        disabled: true
-  stylecheck:
-    checks: ["all", "-ST1020", "-ST1021", "-ST1000", "-ST1003"]
-  interfacebloat:
-    max: 3
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-  testifylint:
-    enable-all: true
-  govet:
-    enable-all: true
-  funlen:
-    ignore-comments: true
-  nolintlint:
-    allow-unused: false
-    allow-no-explanation: []
-    require-explanation: true
-    require-specific: true
-  gocognit:
-    min-complexity: 15
-  gocyclo:
-    min-complexity: 15
-  gocritic:
-    enable-all: true
-  nakedret:
-    max-func-lines: 0
+version: "2"
 
 linters:
-  disable-all: true
   enable:
-    - asasalint
-    - asciicheck
-    - bidichk
-    - copyloopvar
-    - cyclop
-    - decorder
-    - dupl
-    - durationcheck
-    - err113
-    - errcheck
-    - errname
-    - errorlint
-    - exhaustive
-    - fatcontext
-    - forbidigo
-    - funlen
-    - gocheckcompilerdirectives
-    - gochecknoglobals
-    - gochecknoinits
-    - gochecksumtype
-    - gocognit
-    - goconst
-    - gocritic
-    - gocyclo
-    - godot
-    - goimports
-    - goprintffuncname
-    - gosec
-    - gosimple
-    - govet
-    - inamedparam
-    - ineffassign
-    - interfacebloat
-    - lll
-    - loggercheck
-    - makezero
-    - mirror
-    - mnd
-    - musttag
+    - bodyclose
+    - misspell
     - nakedret
-    - nestif
-    - nilerr
-    - nilnil
-    - noctx
-    - nolintlint
-    - nonamedreturns
-    - nosprintfhostport
-    - perfsprint
-    - prealloc
-    - predeclared
-    - promlinter
-    - reassign
     - revive
     - rowserrcheck
-    - sloglint
-    - staticcheck
-    - stylecheck
-    - tagalign
-    - tenv
-    - testableexamples
-    - testifylint
-    - testpackage
-    - thelper
-    - tparallel
-    - typecheck
     - unconvert
     - unparam
-    - unused
-    - usestdlibvars
-    - wastedassign
+    - usetesting
     - whitespace
+  settings:
+    misspell:
+      locale: US
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+
+formatters:
+  enable:
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/amacneil/dbmate
