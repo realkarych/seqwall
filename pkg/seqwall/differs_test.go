@@ -125,3 +125,17 @@ func TestCompareSchemas_WithDifferences(t *testing.T) {
 		t.Errorf("diff header missing in error: %v", err)
 	}
 }
+
+func TestNormalizeConstraints_WithCast(t *testing.T) {
+	src := map[string]driver.ConstraintDefinition{
+		"c_cast_not_null": makeConstraint("users", "c_cast_not_null", "CHECK", "email::text IS NOT NULL", true),
+	}
+	res := normalizeConstraints(src)
+	newKey := "users_email_not_null"
+	if _, ok := res[newKey]; !ok {
+		t.Errorf("expected renamed constraint key %q for cast syntax, got keys %v", newKey, keys(res))
+	}
+	if _, ok := res["c_cast_not_null"]; ok {
+		t.Error("original constraint key should be removed for cast syntax")
+	}
+}

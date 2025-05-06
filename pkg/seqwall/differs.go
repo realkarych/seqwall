@@ -52,7 +52,7 @@ func compareSchemas(before, after *driver.SchemaSnapshot) error {
 func normalizeConstraints(src map[string]driver.ConstraintDefinition) map[string]driver.ConstraintDefinition {
 	checkNullConstraintSubmatchCount := 2
 	res := make(map[string]driver.ConstraintDefinition)
-	re := regexp.MustCompile(`^([A-Za-z0-9_]+)\s+IS\s+NOT\s+NULL$`)
+	re := regexp.MustCompile(`^([A-Za-z0-9_]+)(?:::[A-Za-z0-9_]+)?\s+IS\s+NOT\s+NULL$`)
 	for _, c := range src {
 		if c.ConstraintType == "CHECK" && c.Definition.Valid {
 			if m := re.FindStringSubmatch(c.Definition.String); len(m) == checkNullConstraintSubmatchCount {
