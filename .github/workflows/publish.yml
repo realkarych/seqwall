@@ -50,7 +50,8 @@ jobs:
           mkdir -p dist
           BIN="seqwall"
           [ "$GOOS" = "windows" ] && BIN="${BIN}.exe"
-          go build -ldflags="-s -w" -o "dist/${BIN}" .
+          go build -ldflags="-s -w -X main.Version=${{ steps.tag.outputs.TAG }}" -o "dist/${BIN}" .
+
 
       - name: Archive binary
         env:
