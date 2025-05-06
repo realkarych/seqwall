@@ -15,6 +15,8 @@ const (
 	exitError = 1
 )
 
+var Version = "dev"
+
 type StaircaseOptions struct {
 	MigrationsPath         string   `json:"migrations-path"`
 	UpgradeCmd             string   `json:"upgrade"`
@@ -48,7 +50,9 @@ func newRootCmd(opts *StaircaseOptions) *cobra.Command {
 		Short:         "Seqwall — CLI for testing PostgreSQL migrations",
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		Version:       Version,
 	}
+	root.SetVersionTemplate("seqwall {{.Version}}\n")
 	root.AddCommand(newStaircaseCmd(opts))
 	return root
 }
