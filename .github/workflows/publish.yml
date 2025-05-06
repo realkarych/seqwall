@@ -46,11 +46,12 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
+          VERSION: ${{ steps.tag.outputs.TAG }}
         run: |
           mkdir -p dist
           BIN="seqwall"
           [ "$GOOS" = "windows" ] && BIN="${BIN}.exe"
-          go build -ldflags="-s -w -X main.Version=${{ steps.tag.outputs.TAG }}" -o "dist/${BIN}" .
+          go build -ldflags="-s -w -X 'main.Version=${VERSION}'" -o "dist/${BIN}" .
 
 
       - name: Archive binary
