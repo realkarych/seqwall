@@ -33,7 +33,6 @@ func TestNewStaircaseCmdFlags(t *testing.T) {
 	cmd := newStaircaseCmd(opts)
 	flags := cmd.Flags()
 
-	// verify default option values
 	if opts.PostgresURL != "" {
 		t.Errorf("expected default PostgresURL to be empty, got %q", opts.PostgresURL)
 	}
@@ -53,14 +52,12 @@ func TestNewStaircaseCmdFlags(t *testing.T) {
 		t.Errorf("expected default MigrationsExtension to '.sql', got %q", opts.MigrationsExtension)
 	}
 
-	// verify flags are bound
 	for _, name := range []string{"postgres-url", "migrations-path", "upgrade", "downgrade", "test-snapshots", "schema", "depth", "migrations-extension"} {
 		if flags.Lookup(name) == nil {
 			t.Errorf("flag %q not found on staircase command", name)
 		}
 	}
 
-	// verify required flags annotations
 	for _, name := range []string{"migrations-path", "upgrade", "downgrade"} {
 		flag := flags.Lookup(name)
 		if flag == nil {
@@ -85,11 +82,7 @@ func TestInvalidateOptions_NoDatabaseURL(t *testing.T) {
 
 func TestInvalidateOptions_EnvDatabaseURL(t *testing.T) {
 	opts := &StaircaseOptions{}
-	// set environment variable
-	if err := os.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/db"); err != nil {
-		t.Fatalf("failed to set env: %v", err)
-	}
-	defer os.Unsetenv("DATABASE_URL")
+	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/db")
 
 	err := invalidateOptions(opts)(nil, nil)
 	if err != nil {

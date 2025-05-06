@@ -51,7 +51,7 @@ func TestDiffJSON(t *testing.T) {
 	}
 }
 
-func makeConstraint(table, name, consType, defStr string, valid bool) driver.ConstraintDefinition {
+func makeConstraint(table, _, consType, defStr string, valid bool) driver.ConstraintDefinition {
 	return driver.ConstraintDefinition{
 		TableName:      table,
 		ConstraintType: consType,
@@ -63,20 +63,16 @@ func TestNormalizeConstraints(t *testing.T) {
 	src := map[string]driver.ConstraintDefinition{
 		"c_not_null": makeConstraint("users", "c_not_null", "CHECK", "email IS NOT NULL", true),
 		"c_check":    makeConstraint("users", "c_check", "CHECK", "age > 0", true),
-		"c_other":    makeConstraint("users", "c_other", "UNIQUE", "(id)", true),
+		"c_other":    makeConstraint("users", "c_other", "UNIQUE", "(id)", false),
 	}
 	res := normalizeConstraints(src)
-
-	// CHECK IS NOT NULL should be renamed to users_email_not_null
 	newKey := "users_email_not_null"
 	if _, ok := res[newKey]; !ok {
 		t.Errorf("expected renamed constraint key %q, got keys %v", newKey, keys(res))
 	}
-	// original key should be removed
 	if _, ok := res["c_not_null"]; ok {
 		t.Error("original NOT NULL constraint key should be removed")
 	}
-	// other constraints should remain
 	if _, ok := res["c_check"]; !ok {
 		t.Error("expected CHECK constraint without rename to be kept")
 	}
