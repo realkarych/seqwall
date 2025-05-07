@@ -2,6 +2,7 @@ SHELL := /bin/bash
 
 APP_NAME := seqwall
 DIST_DIR := dist
+VERSION := $(shell git describe --tags --always --dirty)
 
 # Docker / CI variables
 PGPORT ?= 5432
@@ -15,9 +16,12 @@ all: help
 
 ## Build the binary
 build:
-	@echo "==> Building $(APP_NAME)..."
+	@echo "==> Building $(APP_NAME) (version=$(VERSION))..."
 	@mkdir -p $(DIST_DIR)
-	go build -o $(DIST_DIR)/$(APP_NAME) .
+	@go build \
+		-ldflags="-s -w -X 'main.Version=$(VERSION)'" \
+		-o "$(DIST_DIR)/$(APP_NAME)" \
+		.
 
 ## Show contents of the dist directory
 ls:
