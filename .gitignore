@@ -1,3 +1,4 @@
+# Binaries for programs and plugins
 *.exe
 *.exe~
 *.dll
@@ -7,23 +8,57 @@
 # Test binary, built with `go test -c`
 *.test
 
-# Output of the go coverage tool, specifically when used with LiteIDE
+# Output of the go coverage tool, coverage profiles and HTML
 *.out
+coverage.out
+coverage.html
 
-# Go workspace file
+# Go workspace and modules files
 go.work
 go.work.sum
 
-# env file
+# Vendor directory
+vendor/
+
+# Binaries built by `go install`, `go build`, etc.
+bin/
+build/
+dist/
+
+# Docker and related
+docker-compose.override.yml
 .env
 
+# IDE/editor directories and files
 .vscode/
 .idea/
 *.swp
 *~
 
-*.log
-tmp/
-dist/
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
 
-*.DS_Store
+# Logs and temporary files
+*.log
+logs/
+tmp/
+.cache/
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Icon?*
+
+# Other backup or draft files
+*._*
+
+# Ignore Go debug and profiler output
+*.pprof
+
+# Ignore IDE-specific project files
+*.iml
+
+# Ignore binaries in project root
+seqwall
