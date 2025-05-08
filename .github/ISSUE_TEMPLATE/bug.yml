@@ -43,10 +43,10 @@ body:
       required: false
 
   - type: textarea
-    id: pg_version
+    id: software
     attributes:
-      label: PostgreSQL version
-      description: PostgreSQL version used
+      label: Software versions
+      description: Paste `seqwall --version`, PostgreSQL version and any other relevant software information
       render: shell
     validations:
       required: false
