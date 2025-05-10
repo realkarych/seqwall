@@ -60,5 +60,6 @@ Icon?*
 # Ignore IDE-specific project files
 *.iml
 
-# Ignore binaries in project root
-seqwall
+/seqwall
+/seqwall.exe
+!/seqwall/
