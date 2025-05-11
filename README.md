@@ -9,6 +9,15 @@
   Ensure that every migration is reversible, idempotent, compatible with others in sequence, structurally sound and verifiable.
 </p>
 
+<!-- Badges -->
+<p align="center">
+  <a href="https://github.com/realkarych/seqwall/actions/workflows/ci.yml"><img alt="CI status" src="https://github.com/realkarych/seqwall/actions/workflows/ci.yml/badge.svg"></a>&nbsp;<!--
+  --><a href="https://app.codecov.io/gh/realkarych/seqwall"><img alt="coverage" src="https://codecov.io/gh/realkarych/seqwall/branch/master/graph/badge.svg"></a>&nbsp;<!--
+  --><a href="https://go.dev"><img alt="go version" src="https://img.shields.io/github/go-mod/go-version/realkarych/seqwall"></a>&nbsp;<!--
+  --><a href="https://github.com/realkarych/seqwall/blob/master/LICENSE"><img alt="license MIT" src="https://img.shields.io/github/license/realkarych/seqwall"></a>&nbsp;<!--
+  --><img alt="platforms" src="https://img.shields.io/badge/platform-linux%20%7C%20macOS%20%7C%20windows-blue">
+</p>
+
 <hr>
 
 ## <p align=center>📦 Installation</p>
