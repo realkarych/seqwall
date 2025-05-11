@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
 	"os/exec"
+	"runtime"
 	"runtime/debug"
 	"strings"
 
@@ -187,10 +189,19 @@ func (s *StaircaseWorker) makeDownStep(migration string, step int) error {
 
 func (s *StaircaseWorker) executeCommand(command, migration string) (string, error) {
 	command = strings.ReplaceAll(command, CurrentMigrationPlaceholder, migration)
-	cmd := exec.Command("sh", "-c", command)
+	var cmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		cmd = exec.Command("cmd", "/C", command)
+	} else {
+		shell := os.Getenv("SHELL")
+		if shell == "" {
+			shell = "sh"
+		}
+		cmd = exec.Command(shell, "-c", command)
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Printf("Command '%s' failed with error: %v\nCallback:\n%s\nStacktrace:\n%s",
+		log.Printf("Command %q failed: %v\nCallback:\n%s\nStacktrace:\n%s",
 			command, err, string(output), debug.Stack())
 	}
 	return string(output), err
