@@ -24,22 +24,13 @@
 
 ### Docker images
 
-| Image tag | Size&nbsp;≈ | What it contains | Best suited for |
-|-----------|-------------|------------------|-----------------|
-| `ghcr.io/realkarych/seqwall:latest`<br>`ghcr.io/realkarych/seqwall:tiny` | 6 MB | statically linked `seqwall` binary only | CI/CD pipelines, Kubernetes, production scripts |
-| `ghcr.io/realkarych/seqwall:debug` | 20 MB | Bash, `psql`, TZ-data, plus the binary | Interactive debugging and local experiments |
+**Package:** <https://github.com/realkarych/seqwall/pkgs/container/seqwall>.
 
-> The **`latest`** tag always points to the most recent `:tiny` image.
+**Docker image:** `docker pull ghcr.io/realkarych/seqwall:debug`
 
 ```bash
-# minimal image (tiny / latest)
 docker run --rm --network=host \
   ghcr.io/realkarych/seqwall:latest staircase --help
-
-# jump into a shell (debug image)
-docker run --rm -it ghcr.io/realkarych/seqwall:debug bash
-# inside the container
-seqwall --version
 ```
 
 ### Homebrew (macOS & Linux)
