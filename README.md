@@ -22,6 +22,26 @@
 
 ## <p align=center>📦 Installation</p>
 
+### Docker images
+
+| Image tag | Size&nbsp;≈ | What it contains | Best suited for |
+|-----------|-------------|------------------|-----------------|
+| `ghcr.io/realkarych/seqwall:latest`<br>`ghcr.io/realkarych/seqwall:tiny` | 6 MB | statically linked `seqwall` binary only | CI/CD pipelines, Kubernetes, production scripts |
+| `ghcr.io/realkarych/seqwall:debug` | 20 MB | Bash, `psql`, TZ-data, plus the binary | Interactive debugging and local experiments |
+
+> The **`latest`** tag always points to the most recent `:tiny` image.
+
+```bash
+# minimal image (tiny / latest)
+docker run --rm --network=host \
+  ghcr.io/realkarych/seqwall:latest staircase --help
+
+# jump into a shell (debug image)
+docker run --rm -it ghcr.io/realkarych/seqwall:debug bash
+# inside the container
+seqwall --version
+```
+
 ### Homebrew (macOS & Linux)
 
 ```bash
@@ -54,26 +74,6 @@ Download the pre‑built archive from the **[Releases](https://github.com/realka
 add the binary to your `PATH`.
 
 > On Windows, you may need `Unblock-File .\seqwall.exe` before first run.
-
-### Docker images
-
-| Image tag | Size&nbsp;≈ | What it contains | Best suited for |
-|-----------|-------------|------------------|-----------------|
-| `ghcr.io/realkarych/seqwall:latest`<br>`ghcr.io/realkarych/seqwall:tiny` | 6 MB | statically linked `seqwall` binary only | CI/CD pipelines, Kubernetes, production scripts |
-| `ghcr.io/realkarych/seqwall:debug` | 20 MB | Bash, `psql`, TZ-data, plus the binary | Interactive debugging and local experiments |
-
-> The **`latest`** tag always points to the most recent `:tiny` image.
-
-```bash
-# minimal image (tiny / latest)
-docker run --rm --network=host \
-  ghcr.io/realkarych/seqwall:latest staircase --help
-
-# jump into a shell (debug image)
-docker run --rm -it ghcr.io/realkarych/seqwall:debug bash
-# inside the container
-seqwall --version
-```
 
 ### Go install (Go ≥ 1.17)
 
