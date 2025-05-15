@@ -26,8 +26,6 @@
 
 **Package:** <https://github.com/realkarych/seqwall/pkgs/container/seqwall>.
 
-**Docker image:** `docker pull ghcr.io/realkarych/seqwall:debug`
-
 ```bash
 docker run --rm --network=host \
   ghcr.io/realkarych/seqwall:latest staircase --help
