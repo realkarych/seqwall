@@ -131,6 +131,10 @@ We use a 3-phase strategy:
 
 This ensures that the migration chain is robust in both directions, even when recovering from mid-chain downgrades.
 
+<p align="center" width="100%">
+    <img width="75%" alt="staircase" src="https://github.com/user-attachments/assets/b3fad935-a08b-483c-ada1-68586288f6b7">
+</p>
+
 ### Standalone by design
 
 Seqwall is a single-purpose CLI tool — it requires no server, no daemon, no embedded framework, and no special runtime.
