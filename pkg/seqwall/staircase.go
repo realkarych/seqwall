@@ -28,25 +28,29 @@ func (s *StaircaseWorker) Run() error {
 		return fmt.Errorf("%w: %s", ErrNoMigrations(), s.migrationsPath)
 	}
 	log.Printf("Recognized %d migrations", len(migrations))
-	log.Println("Processing staircase…")
+	log.Println("Processing staircase...")
 	if err := s.processStaircase(migrations); err != nil {
 		return fmt.Errorf("staircase failed: %w", err)
 	}
-	log.Println("\n🎉 Staircase test completed successfully!")
 	return nil
 }
 
 func (s *StaircaseWorker) processStaircase(migrations []string) error {
-	log.Println("Step 1: DB actualisation – migrating all migrations up…")
+	log.Println("✨ Step 1: DB actualisation — migrating all migrations up...")
 	if err := s.actualiseDb(migrations); err != nil {
 		return fmt.Errorf("actualise db: %w", err)
 	}
+	log.Println("🕵️‍♂️ Step 2: Down-Up-Down phase — testing schema consistency...")
 	if err := s.processDownUpDown(migrations); err != nil {
 		return fmt.Errorf("down-up-down phase: %w", err)
 	}
-	if err := s.processUpDownUp(migrations); err != nil {
-		return fmt.Errorf("up-down-up phase: %w", err)
+	depth := s.calculateStairDepth(migrations)
+	tail := migrations[len(migrations)-depth:]
+	log.Printf("🚚 Step 3: Re-applying %d migration(s) to reach the latest schema...", len(tail))
+	if err := s.reapplyMigrations(tail); err != nil {
+		return fmt.Errorf("re-actualise phase: %w", err)
 	}
+	log.Println("🎉 Staircase test completed successfully!")
 	return nil
 }
 
@@ -105,25 +109,6 @@ func (s *StaircaseWorker) runDownUpDown(mig string, step int, cur, prev *driver.
 	return nil
 }
 
-func (s *StaircaseWorker) runUpDownUp(mig string, step int, cur, prev *driver.SchemaSnapshot) error {
-	if err := s.makeUpStep(mig, step); err != nil {
-		return fmt.Errorf("up step %q: %w", mig, err)
-	}
-	if err := s.makeDownStep(mig, step); err != nil {
-		return fmt.Errorf("down step %q: %w", mig, err)
-	}
-	if err := s.compareAndSnapshot(prev, fmt.Sprintf("snapshot after down %q", mig)); err != nil {
-		return err
-	}
-	if err := s.makeUpStep(mig, step); err != nil {
-		return fmt.Errorf("final up step %q: %w", mig, err)
-	}
-	if err := s.compareAndSnapshot(cur, fmt.Sprintf("snapshot after final up %q", mig)); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (s *StaircaseWorker) processDownUpDown(migs []string) error {
 	steps := s.calculateStairDepth(migs)
 	for i := 1; i <= steps; i++ {
@@ -144,26 +129,24 @@ func (s *StaircaseWorker) processDownUpDown(migs []string) error {
 	return nil
 }
 
-func (s *StaircaseWorker) processUpDownUp(migs []string) error {
-	log.Println("Step 3: Run staircase test (up-down-up)...")
-	steps := s.calculateStairDepth(migs)
-	tail := migs[len(migs)-steps:]
-	log.Printf("Running staircase test with %d steps", steps)
-	for i, mig := range tail {
-		step := i + 1
-		cur, ok := s.baseline[mig]
+func (s *StaircaseWorker) reapplyMigrations(migrations []string) error {
+	for i, mig := range migrations {
+		log.Printf("Re-applying migration %d/%d: %s", i+1, len(migrations), mig)
+		out, err := s.executeCommand(s.upgradeCmd, mig)
+		if err != nil {
+			return fmt.Errorf("re-apply migration %q (step %d): %w", mig, i+1, err)
+		}
+		log.Println("Migration output:", out)
+
+		exp, ok := s.baseline[mig]
 		if !ok {
 			return fmt.Errorf("%w: %s", ErrBaselineNotFound(), mig)
 		}
-		var prev *driver.SchemaSnapshot
-		if idx := len(migs) - steps + i - 1; idx >= 0 {
-			prev = s.baseline[migs[idx]]
-		}
-		if err := s.runUpDownUp(mig, step, cur, prev); err != nil {
+		if err := s.compareAndSnapshot(exp, fmt.Sprintf("snapshot after re-apply %q", mig)); err != nil {
 			return err
 		}
 	}
-	log.Println("Step 3 (up-down-up) completed successfully!")
+	log.Println("Re-actualise completed successfully!")
 	return nil
 }
 
