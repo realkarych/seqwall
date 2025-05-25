@@ -125,10 +125,9 @@ We use a 3-phase strategy:
    - At each step, the schema is compared with previously captured
    *etalon* snapshots — both before and after — ensuring reversibility and no drift.
 
-3. **`up → down → up`** — starting from the lower point reached in step 2 (after several rollbacks):
-   - re-apply each migration one by one,
-   - after each, immediately downgrade it,
-   - then re-apply again (up step).
+3. **`re-actualize`** — starting from the lower point reached in step 2 (after several rollbacks):
+   - re-apply each migration one by one
+   - compare each re-applied migration with etalon
 
 This ensures that the migration chain is robust in both directions, even when recovering from mid-chain downgrades.
 
