@@ -92,9 +92,22 @@ type SequenceDefinition struct {
 	CycleOption  string `db:"cycle_option"  json:"cycle_option"`
 }
 
+type MatViewDefinition struct {
+	Definition  string `db:"definition"   json:"definition"`
+	IsPopulated bool   `db:"is_populated" json:"is_populated"`
+}
+
+type PrivilegeDefinition struct {
+	Grantee     string `db:"grantee"        json:"grantee"`
+	TableName   string `db:"table_name"     json:"table_name"`
+	Privilege   string `db:"privilege_type" json:"privilege_type"`
+	IsGrantable string `db:"is_grantable"   json:"is_grantable"`
+}
+
 type SchemaSnapshot struct {
 	Tables      map[string]TableDefinition      `db:"tables"       json:"tables"`
 	Views       map[string]ViewDefinition       `db:"views"        json:"views"`
+	MatViews    map[string]MatViewDefinition    `db:"matviews"     json:"matviews"`
 	Indexes     map[string]IndexDefinition      `db:"indexes"      json:"indexes"`
 	Constraints map[string]ConstraintDefinition `db:"constraints"  json:"constraints"`
 	EnumTypes   map[string]EnumDefinition       `db:"enum_types"   json:"enum_types"`
@@ -102,4 +115,5 @@ type SchemaSnapshot struct {
 	Triggers    map[string]TriggerDefinition    `db:"triggers"     json:"triggers"`
 	Functions   map[string]FunctionDefinition   `db:"functions"    json:"functions"`
 	Sequences   map[string]SequenceDefinition   `db:"sequences"    json:"sequences"`
+	Privileges  []PrivilegeDefinition           `db:"privileges"   json:"privileges"`
 }

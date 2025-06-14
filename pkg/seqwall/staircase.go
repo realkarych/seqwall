@@ -202,6 +202,7 @@ func (s *StaircaseWorker) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 	snap := &driver.SchemaSnapshot{
 		Tables:      make(map[string]driver.TableDefinition),
 		Views:       make(map[string]driver.ViewDefinition),
+		MatViews:    make(map[string]driver.MatViewDefinition),
 		Indexes:     make(map[string]driver.IndexDefinition),
 		Constraints: make(map[string]driver.ConstraintDefinition),
 		EnumTypes:   make(map[string]driver.EnumDefinition),
@@ -222,6 +223,8 @@ func (s *StaircaseWorker) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		{s.scanSeqs, "sequences"},
 		{s.scanTriggers, "triggers"},
 		{s.scanViews, "views"},
+		{s.scanMatViews, "matviews"},
+		{s.scanPrivileges, "privileges"},
 	}
 	for _, sc := range scanners {
 		if err := sc.fn(snap); err != nil {
@@ -719,6 +722,79 @@ func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 	if err := rows.Rows.Err(); err != nil {
 		return fmt.Errorf("iterate sequence rows: %w", err)
 	}
+	return nil
+}
+
+func (s *StaircaseWorker) scanMatViews(snapshot *driver.SchemaSnapshot) error {
+	matviewsQuery := fmt.Sprintf(
+		`
+            SELECT
+                matviewname AS table_name,
+                pg_get_viewdef(matviewname::regclass, true) AS definition,
+                ispopulated
+            FROM pg_matviews
+            WHERE %s;
+        `,
+		s.buildSchemaCond("schemaname"),
+	)
+	rows, err := s.dbClient.Execute(matviewsQuery)
+	if err != nil {
+		return fmt.Errorf("query matviews: %w", err)
+	}
+	defer rows.Rows.Close()
+	for rows.Rows.Next() {
+		var matviewName, matviewDefinition string
+		var isPopulated bool
+		if err := rows.Rows.Scan(
+			&matviewName,
+			&matviewDefinition,
+			&isPopulated,
+		); err != nil {
+			return fmt.Errorf("scan matview row: %w", err)
+		}
+		snapshot.MatViews[matviewName] = driver.MatViewDefinition{
+			Definition:  matviewDefinition,
+			IsPopulated: isPopulated,
+		}
+	}
+	if err := rows.Rows.Err(); err != nil {
+		return fmt.Errorf("iterate matview rows: %w", err)
+	}
+	return nil
+}
+
+func (s *StaircaseWorker) scanPrivileges(snapshot *driver.SchemaSnapshot) error {
+	privQuery := fmt.Sprintf(
+		`
+            SELECT grantee, table_name, privilege_type, is_grantable
+		    FROM information_schema.role_table_grants
+		    WHERE %s
+		    ORDER BY grantee, table_name, privilege_type, is_grantable;
+        `,
+		s.buildSchemaCond("table_schema"),
+	)
+	rows, err := s.dbClient.Execute(privQuery)
+	if err != nil {
+		return fmt.Errorf("query privileges: %w", err)
+	}
+	defer rows.Rows.Close()
+	var privs []driver.PrivilegeDefinition
+	for rows.Rows.Next() {
+		var grantee, tableName, privilegeType, isGrantable string
+		if err := rows.Rows.Scan(&grantee, &tableName, &privilegeType, &isGrantable); err != nil {
+			return fmt.Errorf("scan privilege row: %w", err)
+		}
+		privs = append(privs, driver.PrivilegeDefinition{
+			Grantee:     grantee,
+			TableName:   tableName,
+			Privilege:   privilegeType,
+			IsGrantable: isGrantable,
+		})
+	}
+	if err := rows.Rows.Err(); err != nil {
+		return fmt.Errorf("iterate privilege rows: %w", err)
+	}
+	snapshot.Privileges = privs
 	return nil
 }
 
