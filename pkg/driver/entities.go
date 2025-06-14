@@ -92,9 +92,15 @@ type SequenceDefinition struct {
 	CycleOption  string `db:"cycle_option"  json:"cycle_option"`
 }
 
+type MatViewDefinition struct {
+	Definition  string `db:"definition"   json:"definition"`
+	IsPopulated bool   `db:"is_populated" json:"is_populated"`
+}
+
 type SchemaSnapshot struct {
 	Tables      map[string]TableDefinition      `db:"tables"       json:"tables"`
 	Views       map[string]ViewDefinition       `db:"views"        json:"views"`
+	MatViews    map[string]MatViewDefinition    `db:"matviews"     json:"matviews"`
 	Indexes     map[string]IndexDefinition      `db:"indexes"      json:"indexes"`
 	Constraints map[string]ConstraintDefinition `db:"constraints"  json:"constraints"`
 	EnumTypes   map[string]EnumDefinition       `db:"enum_types"   json:"enum_types"`

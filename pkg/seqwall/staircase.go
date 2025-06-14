@@ -202,6 +202,7 @@ func (s *StaircaseWorker) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 	snap := &driver.SchemaSnapshot{
 		Tables:      make(map[string]driver.TableDefinition),
 		Views:       make(map[string]driver.ViewDefinition),
+		MatViews:    make(map[string]driver.MatViewDefinition),
 		Indexes:     make(map[string]driver.IndexDefinition),
 		Constraints: make(map[string]driver.ConstraintDefinition),
 		EnumTypes:   make(map[string]driver.EnumDefinition),
@@ -222,6 +223,7 @@ func (s *StaircaseWorker) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 		{s.scanSeqs, "sequences"},
 		{s.scanTriggers, "triggers"},
 		{s.scanViews, "views"},
+		{s.scanMatViews, "matviews"},
 	}
 	for _, sc := range scanners {
 		if err := sc.fn(snap); err != nil {
@@ -718,6 +720,44 @@ func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 	}
 	if err := rows.Rows.Err(); err != nil {
 		return fmt.Errorf("iterate sequence rows: %w", err)
+	}
+	return nil
+}
+
+func (s *StaircaseWorker) scanMatViews(snapshot *driver.SchemaSnapshot) error {
+	matviewsQuery := fmt.Sprintf(
+		`
+            SELECT
+                matviewname AS table_name,
+                pg_get_viewdef(matviewname::regclass, true) AS definition,
+                ispopulated
+            FROM pg_matviews
+            WHERE %s;
+        `,
+		s.buildSchemaCond("schemaname"),
+	)
+	rows, err := s.dbClient.Execute(matviewsQuery)
+	if err != nil {
+		return fmt.Errorf("query matviews: %w", err)
+	}
+	defer rows.Rows.Close()
+	for rows.Rows.Next() {
+		var matviewName, matviewDefinition string
+		var isPopulated bool
+		if err := rows.Rows.Scan(
+			&matviewName,
+			&matviewDefinition,
+			&isPopulated,
+		); err != nil {
+			return fmt.Errorf("scan matview row: %w", err)
+		}
+		snapshot.MatViews[matviewName] = driver.MatViewDefinition{
+			Definition:  matviewDefinition,
+			IsPopulated: isPopulated,
+		}
+	}
+	if err := rows.Rows.Err(); err != nil {
+		return fmt.Errorf("iterate matview rows: %w", err)
 	}
 	return nil
 }
