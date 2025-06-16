@@ -54,7 +54,7 @@ echo "deb [arch=$(dpkg --print-architecture)] \
 # Install / update
 sudo apt update
 sudo apt install seqwall          # first install
-sudo apt upgrade  seqwall         # later updates
+sudo apt upgrade seqwall          # later updates
 ```
 
 ### Other distros / Windows
