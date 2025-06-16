@@ -70,7 +70,7 @@ jobs:
           fi
 
       - name: Upload to GitHub Releases
-        uses: softprops/action-gh-release@v2.2.2
+        uses: softprops/action-gh-release@v2.3.2
         with:
           tag_name: ${{ steps.tag.outputs.TAG }}
           name: ${{ steps.tag.outputs.TAG }}
