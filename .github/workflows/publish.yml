@@ -26,7 +26,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5.0.1
+        uses: actions/checkout@v6.0.0
 
       - name: Set up Go
         uses: actions/setup-go@v6.0.0
@@ -101,7 +101,7 @@ jobs:
           echo "BRANCH=$branch" >>"$GITHUB_OUTPUT"
 
       - name: Checkout tap
-        uses: actions/checkout@v5.0.1
+        uses: actions/checkout@v6.0.0
         with:
           repository: ${{ env.TAP_REPO }}
           token: ${{ secrets.HOMEBREW_TOKEN }}
@@ -217,7 +217,7 @@ jobs:
         run: echo "$GPG_KEY" | gpg --batch --import
 
       - name: Checkout APT pages
-        uses: actions/checkout@v5.0.1
+        uses: actions/checkout@v6.0.0
         with:
           repository: realkarych/seqwall-apt
           token: ${{ secrets.DEB_TOKEN }}
@@ -249,7 +249,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5.0.1
+        uses: actions/checkout@v6.0.0
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3.7.0
