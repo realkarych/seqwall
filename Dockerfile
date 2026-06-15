@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/go/pkg \
     GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w -X 'main.Version=${VERSION}'" -o /out/seqwall .
 
-FROM alpine:3.23
+FROM alpine:3.24
 
 RUN apk add --no-cache bash postgresql-client ca-certificates tzdata
 
