@@ -40,7 +40,7 @@ run_one() {
   local dir="$1"
   seqwall staircase \
     --migrations-path "$dir" \
-    --upgrade 'MIGRATION_FILE="{current_migration}"; \
+    --upgrade 'MIGRATION_FILE="$SEQWALL_CURRENT_MIGRATION"; \
       MIGRATION_TMPDIR=$(mktemp -d); \
       cleanup_migration_dir() { rm -rf "$MIGRATION_TMPDIR"; }; \
       trap cleanup_migration_dir EXIT; \

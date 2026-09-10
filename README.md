@@ -162,6 +162,49 @@ dbmate --schema-file /dev/null dump
 This requires `pg_dump` on `PATH`. The schema dump is discarded through `/dev/null`, while the bookkeeping table
 remains in the database and becomes part of Seqwall's initial snapshot.
 
+### Passing the current migration to your runner
+
+Every upgrade and downgrade command receives `SEQWALL_CURRENT_MIGRATION` in its environment,
+even when the command contains no placeholder. Its value is the exact path discovered by Seqwall,
+without quoting or normalization. Each command must apply or revert **exactly one migration**.
+An unrestricted `up` that applies all pending migrations violates the staircase algorithm.
+
+For a POSIX-compatible shell, pass the value as a double-quoted argument:
+
+```sh
+seqwall staircase --postgres-url "$DATABASE_URL" --migrations-path ./migrations \
+  --upgrade './migrate-one up "$SEQWALL_CURRENT_MIGRATION"' \
+  --downgrade './migrate-one down "$SEQWALL_CURRENT_MIGRATION"'
+```
+
+The outer single quotes defer expansion until Seqwall runs the command. Inside a shell script,
+use `"$SEQWALL_CURRENT_MIGRATION"` in the same way. Repeat the quoted variable to pass the path twice.
+Do not embed the value in source passed to `eval` or another `sh -c`.
+Seqwall uses `$SHELL`, falling back to `sh` when unset or empty; a non-POSIX shell requires its own
+safe variable syntax, or a helper that reads the environment directly.
+
+On Windows, use a native helper that reads `SEQWALL_CURRENT_MIGRATION`, or invoke PowerShell scripts
+without inserting the filename into the command string:
+
+```text
+--upgrade "powershell.exe -NoProfile -File .\apply-one.ps1"
+--downgrade "powershell.exe -NoProfile -File .\revert-one.ps1"
+```
+
+The scripts read `$env:SEQWALL_CURRENT_MIGRATION` as a string; for example,
+`Get-Content -LiteralPath $env:SEQWALL_CURRENT_MIGRATION` reads that exact file.
+A native helper can pass the value to its runner using an argument list.
+Expanding `%SEQWALL_CURRENT_MIGRATION%` in cmd is not a universal literal-data contract:
+delayed expansion, `CALL`, nested parsing, and command construction can reinterpret the filename.
+
+The legacy `{current_migration}` placeholder retains raw source substitution for filenames containing
+only ASCII letters, digits, `_`, `-`, `.`, and `/`; Windows also permits `\` and `:`.
+An empty value retains the previous empty substitution behavior. Every other filename is rejected
+before the shell starts if the command contains a placeholder, including quoted, embedded, or repeated
+placeholders. This deliberately restricts previously accepted templates with spaces or punctuation;
+use the environment contract for those names. Legacy substitution preserves simple filename behavior
+and does not promise literal arguments in arbitrary shell evaluation contexts.
+
 ### Limitations & Scope
 
 Does this mean Seqwall is the only tool you need for testing migrations?
