@@ -3,6 +3,7 @@ package seqwall
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/lib/pq"
@@ -148,14 +149,14 @@ func TestPostgresTypeRecreation(t *testing.T) {
 
 			create()
 			before := postgresSnapshot(t, s)
-			beforeOID := postgresColumnTypeOID(t, s, schemaName, "items", "value")
+			beforeOID := postgresItemValueTypeOID(t, s, schemaName)
 			postgresExec(t, s, "DROP TABLE "+schema+".items")
 			for _, query := range tt.dropTypes(schema) {
 				postgresExec(t, s, query)
 			}
 			create()
 			after := postgresSnapshot(t, s)
-			afterOID := postgresColumnTypeOID(t, s, schemaName, "items", "value")
+			afterOID := postgresItemValueTypeOID(t, s, schemaName)
 
 			if beforeOID == afterOID {
 				t.Fatalf("declared type OID remained %d after full recreation", beforeOID)
@@ -166,6 +167,58 @@ func TestPostgresTypeRecreation(t *testing.T) {
 			assertColumnTypeIdentity(t, before, schemaName+".items", "value", tt.wantIdentity(schemaName))
 			assertColumnTypeIdentity(t, after, schemaName+".items", "value", tt.wantIdentity(schemaName))
 		})
+	}
+}
+
+func TestPostgresTypeArrayNameCollisionRecreation(t *testing.T) {
+	s := newPostgresIntegrationWorker(t, 1)
+	schemaName := s.schemas[0]
+	schema := pq.QuoteIdentifier(schemaName)
+	createTable := func() {
+		postgresExec(t, s, "CREATE TABLE "+schema+".items (value "+schema+".mood[])")
+	}
+
+	postgresExec(t, s, "CREATE TYPE "+schema+".mood AS ENUM ('ok','bad')")
+	postgresExec(t, s, "CREATE TYPE "+schema+"._mood AS (x integer,y text)")
+	createTable()
+	before := postgresSnapshot(t, s)
+	beforeOID := postgresItemValueTypeOID(t, s, schemaName)
+	beforeComposite := postgresCompositeAttributes(t, s, schemaName, "_mood")
+
+	postgresExec(t, s, "DROP TABLE "+schema+".items")
+	postgresExec(t, s, "DROP TYPE "+schema+"._mood")
+	postgresExec(t, s, "DROP TYPE "+schema+".mood")
+	postgresExec(t, s, "CREATE TYPE "+schema+"._mood AS (x integer,y text)")
+	postgresExec(t, s, "CREATE TYPE "+schema+".mood AS ENUM ('ok','bad')")
+	createTable()
+	after := postgresSnapshot(t, s)
+	afterOID := postgresItemValueTypeOID(t, s, schemaName)
+	afterComposite := postgresCompositeAttributes(t, s, schemaName, "_mood")
+
+	if beforeOID == afterOID {
+		t.Fatalf("declared array type OID remained %d after full recreation", beforeOID)
+	}
+	beforeColumn := snapshotColumn(t, before, schemaName+".items", "value")
+	afterColumn := snapshotColumn(t, after, schemaName+".items", "value")
+	if beforeColumn.UDTName == afterColumn.UDTName {
+		t.Fatalf("generated array UDT name remained %q across reversed type creation order", beforeColumn.UDTName)
+	}
+	if got, want := beforeColumn.TypeMeta.TypeIdentity, schemaName+".mood[]"; got != want {
+		t.Fatalf("before type identity = %q, want %q", got, want)
+	}
+	if got, want := afterColumn.TypeMeta.TypeIdentity, schemaName+".mood[]"; got != want {
+		t.Fatalf("after type identity = %q, want %q", got, want)
+	}
+	wantComposite := []string{"x:integer", "y:text"}
+	if !reflect.DeepEqual(beforeComposite, wantComposite) || !reflect.DeepEqual(afterComposite, wantComposite) {
+		t.Fatalf("composite attributes before/after = %v/%v, want %v", beforeComposite, afterComposite, wantComposite)
+	}
+	wantLabels := []string{"ok", "bad"}
+	if !reflect.DeepEqual(before.EnumTypes[schemaName+".mood"].Labels, wantLabels) || !reflect.DeepEqual(after.EnumTypes[schemaName+".mood"].Labels, wantLabels) {
+		t.Fatalf("enum labels before/after = %v/%v, want %v", before.EnumTypes[schemaName+".mood"].Labels, after.EnumTypes[schemaName+".mood"].Labels, wantLabels)
+	}
+	if err := compareSchemas(before, after); err != nil {
+		t.Fatalf("identical user-visible type recreation changed snapshot: %v", err)
 	}
 }
 
@@ -323,7 +376,7 @@ func TestPostgresTypeCollationNamespace(t *testing.T) {
 	}
 }
 
-func postgresColumnTypeOID(t *testing.T, s *StaircaseWorker, schema, table, column string) int {
+func postgresItemValueTypeOID(t *testing.T, s *StaircaseWorker, schema string) int {
 	t.Helper()
 	result, err := s.dbClient.Execute(`
 		SELECT a.atttypid
@@ -331,19 +384,48 @@ func postgresColumnTypeOID(t *testing.T, s *StaircaseWorker, schema, table, colu
 		JOIN pg_catalog.pg_class r ON r.oid = a.attrelid
 		JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
 		WHERE n.nspname = $1 AND r.relname = $2 AND a.attname = $3
-	`, schema, table, column)
+	`, schema, "items", "value")
 	if err != nil {
 		t.Fatalf("query column type OID: %v", err)
 	}
 	defer result.Rows.Close()
 	if !result.Rows.Next() {
-		t.Fatalf("column %s.%s.%s has no type OID", schema, table, column)
+		t.Fatalf("column %s.items.value has no type OID", schema)
 	}
 	var oid int
 	if err := result.Rows.Scan(&oid); err != nil {
 		t.Fatalf("scan column type OID: %v", err)
 	}
 	return oid
+}
+
+func postgresCompositeAttributes(t *testing.T, s *StaircaseWorker, schema, typeName string) []string {
+	t.Helper()
+	result, err := s.dbClient.Execute(`
+		SELECT a.attname, pg_catalog.format_type(a.atttypid, a.atttypmod)
+		FROM pg_catalog.pg_type t
+		JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace
+		JOIN pg_catalog.pg_class r ON r.oid = t.typrelid
+		JOIN pg_catalog.pg_attribute a ON a.attrelid = r.oid
+		WHERE n.nspname = $1 AND t.typname = $2 AND a.attnum > 0 AND NOT a.attisdropped
+		ORDER BY a.attnum
+	`, schema, typeName)
+	if err != nil {
+		t.Fatalf("query composite attributes: %v", err)
+	}
+	defer result.Rows.Close()
+	var attributes []string
+	for result.Rows.Next() {
+		var name, dataType string
+		if err := result.Rows.Scan(&name, &dataType); err != nil {
+			t.Fatalf("scan composite attribute: %v", err)
+		}
+		attributes = append(attributes, name+":"+dataType)
+	}
+	if err := result.Rows.Err(); err != nil {
+		t.Fatalf("iterate composite attributes: %v", err)
+	}
+	return attributes
 }
 
 func snapshotColumn(t *testing.T, snapshot *driver.SchemaSnapshot, tableName, columnName string) driver.ColumnDefinition {
