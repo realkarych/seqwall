@@ -49,9 +49,15 @@ type IndexDefinition struct {
 }
 
 type ConstraintDefinition struct {
-	TableName      string         `db:"table_name"      json:"table_name"`
-	ConstraintType string         `db:"constraint_type" json:"constraint_type"`
-	Definition     sql.NullString `db:"definition"      json:"definition"`
+	TableSchema       string         `db:"table_schema"       json:"table_schema"`
+	TableName         string         `db:"table_name"         json:"table_name"`
+	ConstraintType    string         `db:"constraint_type"    json:"constraint_type"`
+	Definition        sql.NullString `db:"definition"         json:"definition"`
+	Deferrable        bool           `db:"deferrable"         json:"deferrable"`
+	InitiallyDeferred bool           `db:"initially_deferred" json:"initially_deferred"`
+	Validated         bool           `db:"validated"          json:"validated"`
+	NoInherit         bool           `db:"no_inherit"         json:"no_inherit"`
+	Enforced          bool           `db:"enforced"           json:"enforced"`
 }
 
 type EnumDefinition struct {
@@ -59,13 +65,16 @@ type EnumDefinition struct {
 }
 
 type ForeignKeyDefinition struct {
-	ConstraintName    string `db:"constraint_name"     json:"constraint_name"`
-	TableName         string `db:"table_name"          json:"table_name"`
-	ColumnName        string `db:"column_name"         json:"column_name"`
-	ForeignTableName  string `db:"foreign_table_name"  json:"foreign_table_name"`
-	ForeignColumnName string `db:"foreign_column_name" json:"foreign_column_name"`
-	UpdateRule        string `db:"update_rule"         json:"update_rule"`
-	DeleteRule        string `db:"delete_rule"         json:"delete_rule"`
+	ConstraintName     string   `db:"constraint_name"      json:"constraint_name"`
+	TableSchema        string   `db:"table_schema"         json:"table_schema"`
+	TableName          string   `db:"table_name"           json:"table_name"`
+	ColumnNames        []string `db:"column_names"         json:"column_names"`
+	ForeignTableSchema string   `db:"foreign_table_schema" json:"foreign_table_schema"`
+	ForeignTableName   string   `db:"foreign_table_name"   json:"foreign_table_name"`
+	ForeignColumnNames []string `db:"foreign_column_names" json:"foreign_column_names"`
+	Definition         string   `db:"definition"           json:"definition"`
+	UpdateRule         string   `db:"update_rule"          json:"update_rule"`
+	DeleteRule         string   `db:"delete_rule"          json:"delete_rule"`
 }
 
 type TriggerDefinition struct {
