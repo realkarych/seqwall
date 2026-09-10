@@ -502,6 +502,7 @@ func (s *StaircaseWorker) scanConstraints(snapshot *driver.SchemaSnapshot) error
                 CASE c.contype
                     WHEN 'c' THEN 'CHECK'
                     WHEN 'f' THEN 'FOREIGN KEY'
+                    WHEN 'n' THEN 'NOT NULL'
                     WHEN 'p' THEN 'PRIMARY KEY'
                     WHEN 'u' THEN 'UNIQUE'
                     WHEN 'x' THEN 'EXCLUDE'
@@ -516,7 +517,7 @@ func (s *StaircaseWorker) scanConstraints(snapshot *driver.SchemaSnapshot) error
             JOIN pg_catalog.pg_class r ON r.oid = c.conrelid
             JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
             WHERE %s
-              AND c.contype IN ('c', 'f', 'p', 'u', 'x')
+              AND c.contype IN ('c', 'f', 'n', 'p', 'u', 'x')
             ORDER BY n.nspname, r.relname, c.conname;
         `,
 		s.buildSchemaCond("n.nspname"),

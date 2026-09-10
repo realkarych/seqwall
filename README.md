@@ -112,6 +112,8 @@ This includes *tables*, *columns*, *constraints*, *indexes*, *views*,
 *triggers*, *functions*, *enums*, *sequences*, and *foreign keys*.
 Constraint snapshots retain complete definitions and enforcement state. Foreign key snapshots retain ordered
 local and referenced columns with qualified table identities.
+Column snapshots record effective nullability on every supported PostgreSQL version. On PostgreSQL 18, constraint
+snapshots also retain native `NOT NULL` names, definitions, validation state, enforcement, and inheritance behavior.
 Trigger snapshots retain complete definitions and enabled state for user-defined triggers, including constraint
 triggers. PostgreSQL-generated internal triggers are excluded, so custom changes to their firing mode are not compared.
 Column references to domain, composite, and range types retain their qualified type identity. Standalone definitions
