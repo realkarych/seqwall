@@ -110,6 +110,8 @@ and **PostgreSQL system catalogs**.
 
 This includes *tables*, *columns*, *constraints*, *indexes*, *views*,
 *triggers*, *functions*, *enums*, *sequences*, and *foreign keys*.
+Constraint snapshots retain complete definitions and enforcement state. Foreign key snapshots retain ordered
+local and referenced columns with qualified table identities.
 The snapshots are then compared using structured diffs. This comparison covers the captured metadata
 in the selected schemas; it does not establish universal database equivalence.
 

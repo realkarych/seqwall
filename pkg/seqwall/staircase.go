@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/lib/pq"
 	"github.com/realkarych/seqwall/pkg/driver"
 )
 
@@ -471,18 +472,31 @@ func (s *StaircaseWorker) scanConstraints(snapshot *driver.SchemaSnapshot) error
 	constraintsQuery := fmt.Sprintf(
 		`
             SELECT
-                pg_catalog.format('%%I.%%I.%%I', tc.table_schema, tc.table_name, tc.constraint_name),
-                tc.constraint_name,
-                tc.table_name,
-                tc.constraint_type,
-                cc.check_clause
-            FROM information_schema.table_constraints tc
-            LEFT JOIN information_schema.check_constraints cc
-                   ON tc.constraint_name = cc.constraint_name
+                pg_catalog.format('%%I.%%I.%%I', n.nspname, r.relname, c.conname),
+                c.conname,
+                n.nspname,
+                r.relname,
+                CASE c.contype
+                    WHEN 'c' THEN 'CHECK'
+                    WHEN 'f' THEN 'FOREIGN KEY'
+                    WHEN 'p' THEN 'PRIMARY KEY'
+                    WHEN 'u' THEN 'UNIQUE'
+                    WHEN 'x' THEN 'EXCLUDE'
+                END,
+                pg_catalog.pg_get_constraintdef(c.oid, false),
+                c.condeferrable,
+                c.condeferred,
+                c.convalidated,
+                c.connoinherit,
+                COALESCE((to_jsonb(c)->>'conenforced')::boolean, true)
+            FROM pg_catalog.pg_constraint c
+            JOIN pg_catalog.pg_class r ON r.oid = c.conrelid
+            JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
             WHERE %s
-            ORDER BY tc.table_schema, tc.table_name, tc.constraint_name;
+              AND c.contype IN ('c', 'f', 'p', 'u', 'x')
+            ORDER BY n.nspname, r.relname, c.conname;
         `,
-		s.buildSchemaCond("tc.table_schema"),
+		s.buildSchemaCond("n.nspname"),
 	)
 	constrRows, err := s.dbClient.Execute(constraintsQuery)
 	if err != nil {
@@ -491,23 +505,38 @@ func (s *StaircaseWorker) scanConstraints(snapshot *driver.SchemaSnapshot) error
 	defer constrRows.Rows.Close()
 	for constrRows.Rows.Next() {
 		var (
-			constraintKey, constraintName string
-			tableName, constraintType     string
-			checkClause                   sql.NullString
+			constraintKey, constraintName  string
+			tableSchema, tableName         string
+			constraintType                 string
+			definition                     sql.NullString
+			deferrable, initiallyDeferred  bool
+			validated, noInherit, enforced bool
 		)
 		if err := constrRows.Rows.Scan(
 			&constraintKey,
 			&constraintName,
+			&tableSchema,
 			&tableName,
 			&constraintType,
-			&checkClause,
+			&definition,
+			&deferrable,
+			&initiallyDeferred,
+			&validated,
+			&noInherit,
+			&enforced,
 		); err != nil {
 			return fmt.Errorf("scan constraint row: %w", err)
 		}
 		snapshot.Constraints[constraintKey] = driver.ConstraintDefinition{
-			TableName:      tableName,
-			ConstraintType: constraintType,
-			Definition:     checkClause,
+			TableSchema:       tableSchema,
+			TableName:         tableName,
+			ConstraintType:    constraintType,
+			Definition:        definition,
+			Deferrable:        deferrable,
+			InitiallyDeferred: initiallyDeferred,
+			Validated:         validated,
+			NoInherit:         noInherit,
+			Enforced:          enforced,
 		}
 	}
 	if err := constrRows.Rows.Err(); err != nil {
@@ -557,23 +586,53 @@ func (s *StaircaseWorker) scanFks(snapshot *driver.SchemaSnapshot) error {
 	foreignKeysQuery := fmt.Sprintf(
 		`
             SELECT
-                pg_catalog.format('%%I.%%I.%%I', tc.table_schema, tc.table_name, tc.constraint_name),
-                tc.constraint_name,
-                tc.table_name,
-                kcu.column_name,
-                ccu.table_name  AS foreign_table_name,
-                ccu.column_name AS foreign_column_name,
-                rc.update_rule,
-                rc.delete_rule
-            FROM information_schema.table_constraints        AS tc
-            JOIN information_schema.key_column_usage         AS kcu ON tc.constraint_name = kcu.constraint_name
-            JOIN information_schema.referential_constraints  AS rc  ON tc.constraint_name = rc.constraint_name
-            JOIN information_schema.constraint_column_usage  AS ccu ON ccu.constraint_name = tc.constraint_name
-            WHERE tc.constraint_type = 'FOREIGN KEY'
+                pg_catalog.format('%%I.%%I.%%I', n.nspname, r.relname, c.conname),
+                c.conname,
+                n.nspname,
+                r.relname,
+                ARRAY(
+                    SELECT a.attname::text
+                    FROM unnest(c.conkey) WITH ORDINALITY k(attnum, ord)
+                    JOIN pg_catalog.pg_attribute a
+                      ON a.attrelid = c.conrelid
+                     AND a.attnum = k.attnum
+                    ORDER BY k.ord
+                ),
+                fn.nspname,
+                fr.relname,
+                ARRAY(
+                    SELECT a.attname::text
+                    FROM unnest(c.confkey) WITH ORDINALITY k(attnum, ord)
+                    JOIN pg_catalog.pg_attribute a
+                      ON a.attrelid = c.confrelid
+                     AND a.attnum = k.attnum
+                    ORDER BY k.ord
+                ),
+                pg_catalog.pg_get_constraintdef(c.oid, false),
+                CASE c.confupdtype
+                    WHEN 'a' THEN 'NO ACTION'
+                    WHEN 'r' THEN 'RESTRICT'
+                    WHEN 'c' THEN 'CASCADE'
+                    WHEN 'n' THEN 'SET NULL'
+                    WHEN 'd' THEN 'SET DEFAULT'
+                END,
+                CASE c.confdeltype
+                    WHEN 'a' THEN 'NO ACTION'
+                    WHEN 'r' THEN 'RESTRICT'
+                    WHEN 'c' THEN 'CASCADE'
+                    WHEN 'n' THEN 'SET NULL'
+                    WHEN 'd' THEN 'SET DEFAULT'
+                END
+            FROM pg_catalog.pg_constraint c
+            JOIN pg_catalog.pg_class r ON r.oid = c.conrelid
+            JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
+            JOIN pg_catalog.pg_class fr ON fr.oid = c.confrelid
+            JOIN pg_catalog.pg_namespace fn ON fn.oid = fr.relnamespace
+            WHERE c.contype = 'f'
               AND %s
-            ORDER BY tc.table_schema, tc.table_name, tc.constraint_name, kcu.ordinal_position;
+            ORDER BY n.nspname, r.relname, c.conname;
         `,
-		s.buildSchemaCond("tc.table_schema"),
+		s.buildSchemaCond("n.nspname"),
 	)
 	rows, err := s.dbClient.Execute(foreignKeysQuery)
 	if err != nil {
@@ -582,31 +641,41 @@ func (s *StaircaseWorker) scanFks(snapshot *driver.SchemaSnapshot) error {
 	defer rows.Rows.Close()
 	for rows.Rows.Next() {
 		var (
-			constraintKey, constraintName       string
-			tableName, columnName               string
-			foreignTableName, foreignColumnName string
-			updateRule, deleteRule              string
+			constraintKey, constraintName string
+			tableSchema, tableName        string
+			columnNames                   pq.StringArray
+			foreignTableSchema            string
+			foreignTableName              string
+			foreignColumnNames            pq.StringArray
+			definition, updateRule        string
+			deleteRule                    string
 		)
 		if err := rows.Rows.Scan(
 			&constraintKey,
 			&constraintName,
+			&tableSchema,
 			&tableName,
-			&columnName,
+			&columnNames,
+			&foreignTableSchema,
 			&foreignTableName,
-			&foreignColumnName,
+			&foreignColumnNames,
+			&definition,
 			&updateRule,
 			&deleteRule,
 		); err != nil {
 			return fmt.Errorf("scan foreign key row: %w", err)
 		}
 		snapshot.ForeignKeys[constraintKey] = driver.ForeignKeyDefinition{
-			ConstraintName:    constraintName,
-			TableName:         tableName,
-			ColumnName:        columnName,
-			ForeignTableName:  foreignTableName,
-			ForeignColumnName: foreignColumnName,
-			UpdateRule:        updateRule,
-			DeleteRule:        deleteRule,
+			ConstraintName:     constraintName,
+			TableSchema:        tableSchema,
+			TableName:          tableName,
+			ColumnNames:        columnNames,
+			ForeignTableSchema: foreignTableSchema,
+			ForeignTableName:   foreignTableName,
+			ForeignColumnNames: foreignColumnNames,
+			Definition:         definition,
+			UpdateRule:         updateRule,
+			DeleteRule:         deleteRule,
 		}
 	}
 	if err := rows.Rows.Err(); err != nil {
