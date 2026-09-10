@@ -9,6 +9,7 @@ type Cli interface {
 type StaircaseWorker struct {
 	dbClient               *driver.PostgresClient            `json:"-"`
 	baseline               map[string]*driver.SchemaSnapshot `json:"-"`
+	initialBaseline        *driver.SchemaSnapshot            `json:"-"`
 	migrationsPath         string
 	upgradeCmd             string
 	downgradeCmd           string

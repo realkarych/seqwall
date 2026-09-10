@@ -146,6 +146,47 @@ func TestProcessDownUpDownRequiresBaselineWhenComparing(t *testing.T) {
 	}
 }
 
+func TestProcessDownUpDownRequiresInitialBaselineBeforeCommand(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "steps")
+	worker := &StaircaseWorker{
+		compareSchemaSnapshots: true,
+		upgradeCmd:             "printf U >> " + logPath,
+		downgradeCmd:           "printf D >> " + logPath,
+		baseline: map[string]*driver.SchemaSnapshot{
+			"1.sql": {},
+		},
+	}
+
+	err := worker.processDownUpDown([]string{"1.sql"})
+	if !errors.Is(err, ErrBaselineNotFound()) {
+		t.Fatalf("processDownUpDown() error = %v, want ErrBaselineNotFound", err)
+	}
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Fatalf("migration command ran before baseline validation: %v", err)
+	}
+}
+
+func TestProcessDownUpDownRequiresPredecessorBaselineBeforeCommand(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "steps")
+	worker := &StaircaseWorker{
+		compareSchemaSnapshots: true,
+		depth:                  1,
+		upgradeCmd:             "printf U >> " + logPath,
+		downgradeCmd:           "printf D >> " + logPath,
+		baseline: map[string]*driver.SchemaSnapshot{
+			"2.sql": {},
+		},
+	}
+
+	err := worker.processDownUpDown([]string{"1.sql", "2.sql"})
+	if !errors.Is(err, ErrBaselineNotFound()) {
+		t.Fatalf("processDownUpDown() error = %v, want ErrBaselineNotFound", err)
+	}
+	if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+		t.Fatalf("migration command ran before baseline validation: %v", err)
+	}
+}
+
 func TestReapplyMigrationsRequiresBaselineWhenComparing(t *testing.T) {
 	worker := &StaircaseWorker{
 		compareSchemaSnapshots: true,

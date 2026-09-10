@@ -149,6 +149,19 @@ Seqwall runs your actual migration scripts and commands — no wrapper DSLs, no 
 You bring your own migration runner (`dbmate`, `alembic`, `goose`, `sqlx`, `atlas`, etc.).
 Seqwall just executes shell commands.
 
+Seqwall captures the database state before the first migration and expects the first rollback to restore that state.
+Initialize any tables or other objects that your migration runner needs before starting Seqwall.
+
+For dbmate 2.27.0, the following command creates its `schema_migrations` table without applying a migration:
+
+```bash
+export DATABASE_URL='postgres://postgres@localhost:5432/postgres?sslmode=disable'
+dbmate --schema-file /dev/null dump
+```
+
+This requires `pg_dump` on `PATH`. The schema dump is discarded through `/dev/null`, while the bookkeeping table
+remains in the database and becomes part of Seqwall's initial snapshot.
+
 ### Limitations & Scope
 
 Does this mean Seqwall is the only tool you need for testing migrations?
