@@ -19,7 +19,7 @@ type baselineMigration struct {
 	Down string `json:"down"`
 }
 
-func TestBaselineCommandRunner(t *testing.T) {
+func TestPostgresBaselineCommandRunner(t *testing.T) {
 	if os.Getenv("SEQWALL_BASELINE_RUNNER") != "1" {
 		return
 	}
@@ -89,7 +89,7 @@ func TestBaselineCommandRunner(t *testing.T) {
 	}
 }
 
-func TestFirstMigrationRollbackUsesInitialSnapshot(t *testing.T) {
+func TestPostgresFirstMigrationRollbackUsesInitialSnapshot(t *testing.T) {
 	worker, schema := newBaselineIntegrationWorker(t, 0, "", "")
 	migration := writeBaselineMigration(t,
 		"001_leftover.json",
@@ -103,7 +103,7 @@ func TestFirstMigrationRollbackUsesInitialSnapshot(t *testing.T) {
 	}
 }
 
-func TestReversibleFirstMigrationRetainsInitialSchema(t *testing.T) {
+func TestPostgresReversibleFirstMigrationRetainsInitialSchema(t *testing.T) {
 	worker, schema := newBaselineIntegrationWorker(t, 0, "", "")
 	postgresExec(t, worker, "CREATE TABLE "+qualifiedName(schema, "unrelated")+"(id integer)")
 	migration := writeBaselineMigration(t,
@@ -124,7 +124,7 @@ func TestReversibleFirstMigrationRetainsInitialSchema(t *testing.T) {
 	}
 }
 
-func TestFinalRollbackUsesInitialSnapshot(t *testing.T) {
+func TestPostgresFinalRollbackUsesInitialSnapshot(t *testing.T) {
 	counterPath := filepath.Join(t.TempDir(), "down-count")
 	worker, schema := newBaselineIntegrationWorker(t, 0, "skip-final-down", counterPath)
 	migration := writeBaselineMigration(t,
@@ -139,7 +139,7 @@ func TestFinalRollbackUsesInitialSnapshot(t *testing.T) {
 	}
 }
 
-func TestStaircaseDepthSnapshots(t *testing.T) {
+func TestPostgresStaircaseDepthSnapshots(t *testing.T) {
 	for _, tt := range []struct {
 		name  string
 		depth int
@@ -172,7 +172,7 @@ func TestStaircaseDepthSnapshots(t *testing.T) {
 	}
 }
 
-func TestInitialSnapshotFailurePrecedesUpgrade(t *testing.T) {
+func TestPostgresInitialSnapshotFailurePrecedesUpgrade(t *testing.T) {
 	worker, schema := newBaselineIntegrationWorker(t, 0, "", "")
 	logPath := filepath.Join(t.TempDir(), "commands")
 	worker.upgradeCmd = "printf U >> " + shellQuote(logPath)
@@ -234,7 +234,7 @@ func baselineCommand(direction, mode, counterPath, logPath string) string {
 		"SEQWALL_BASELINE_COUNTER=" + shellQuote(counterPath),
 		"SEQWALL_BASELINE_LOG=" + shellQuote(logPath),
 		shellQuote(os.Args[0]),
-		"-test.run=" + shellQuote("^TestBaselineCommandRunner$"),
+		"-test.run=" + shellQuote("^TestPostgresBaselineCommandRunner$"),
 		"--",
 		shellQuote(CurrentMigrationPlaceholder),
 	}
