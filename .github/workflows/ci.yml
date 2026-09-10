@@ -114,7 +114,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pg: [ '13', '14', '15', '16', '17' ]
+        pg: [ '13', '14', '15', '16', '17', '18' ]
     env:
       PG_VERSION: ${{ matrix.pg }}
     steps:

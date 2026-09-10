@@ -51,51 +51,20 @@ func TestDiffJSON(t *testing.T) {
 	}
 }
 
-func makeConstraint(table, _, consType, defStr string, valid bool) driver.ConstraintDefinition {
+func makeCheckConstraint(table, defStr string) driver.ConstraintDefinition {
 	return driver.ConstraintDefinition{
 		TableName:      table,
-		ConstraintType: consType,
-		Definition:     sql.NullString{String: defStr, Valid: valid},
+		ConstraintType: "CHECK",
+		Definition:     sql.NullString{String: defStr, Valid: true},
 	}
-}
-
-func TestNormalizeConstraints(t *testing.T) {
-	src := map[string]driver.ConstraintDefinition{
-		"c_not_null": makeConstraint("users", "c_not_null", "CHECK", "email IS NOT NULL", true),
-		"c_check":    makeConstraint("users", "c_check", "CHECK", "age > 0", true),
-		"c_other":    makeConstraint("users", "c_other", "UNIQUE", "(id)", false),
-	}
-	res := normalizeConstraints(src)
-	newKey := "users_email_not_null"
-	if _, ok := res[newKey]; !ok {
-		t.Errorf("expected renamed constraint key %q, got keys %v", newKey, keys(res))
-	}
-	if _, ok := res["c_not_null"]; ok {
-		t.Error("original NOT NULL constraint key should be removed")
-	}
-	if _, ok := res["c_check"]; !ok {
-		t.Error("expected CHECK constraint without rename to be kept")
-	}
-	if _, ok := res["c_other"]; !ok {
-		t.Error("expected non-CHECK constraint to be kept")
-	}
-}
-
-// helper to list map keys
-func keys(m map[string]driver.ConstraintDefinition) []string {
-	res := make([]string, 0, len(m))
-	for k := range m {
-		res = append(res, k)
-	}
-	return res
 }
 
 func TestCompareSchemas_NoDifferences(t *testing.T) {
 	before := &driver.SchemaSnapshot{Constraints: map[string]driver.ConstraintDefinition{
-		"c1": makeConstraint("t1", "c1", "CHECK", "col IS NOT NULL", true),
+		"c1": makeCheckConstraint("t1", "col IS NOT NULL"),
 	}}
 	after := &driver.SchemaSnapshot{Constraints: map[string]driver.ConstraintDefinition{
-		"c1": makeConstraint("t1", "c1", "CHECK", "col IS NOT NULL", true),
+		"c1": makeCheckConstraint("t1", "col IS NOT NULL"),
 	}}
 	err := compareSchemas(before, after)
 	if err != nil {
@@ -105,10 +74,10 @@ func TestCompareSchemas_NoDifferences(t *testing.T) {
 
 func TestCompareSchemas_WithDifferences(t *testing.T) {
 	before := &driver.SchemaSnapshot{Constraints: map[string]driver.ConstraintDefinition{
-		"c1": makeConstraint("t1", "c1", "CHECK", "col > 0", true),
+		"c1": makeCheckConstraint("t1", "col > 0"),
 	}}
 	after := &driver.SchemaSnapshot{Constraints: map[string]driver.ConstraintDefinition{
-		"c1": makeConstraint("t1", "c1", "CHECK", "col >= 0", true),
+		"c1": makeCheckConstraint("t1", "col >= 0"),
 	}}
 	err := compareSchemas(before, after)
 	if err == nil {
@@ -122,16 +91,43 @@ func TestCompareSchemas_WithDifferences(t *testing.T) {
 	}
 }
 
-func TestNormalizeConstraints_WithCast(t *testing.T) {
-	src := map[string]driver.ConstraintDefinition{
-		"c_cast_not_null": makeConstraint("users", "c_cast_not_null", "CHECK", "email::text IS NOT NULL", true),
+func TestCompareSchemasDoesNotMutateInputs(t *testing.T) {
+	before := &driver.SchemaSnapshot{Constraints: map[string]driver.ConstraintDefinition{
+		"first_real_key": makeCheckConstraint("items", "x IS NOT NULL"),
+	}}
+	after := &driver.SchemaSnapshot{Constraints: map[string]driver.ConstraintDefinition{
+		"second_real_key": makeCheckConstraint("items", "x IS NOT NULL"),
+	}}
+	beforeBytes, err := marshalSnapshot(before)
+	if err != nil {
+		t.Fatalf("marshal before input: %v", err)
 	}
-	res := normalizeConstraints(src)
-	newKey := "users_email_not_null"
-	if _, ok := res[newKey]; !ok {
-		t.Errorf("expected renamed constraint key %q for cast syntax, got keys %v", newKey, keys(res))
+	afterBytes, err := marshalSnapshot(after)
+	if err != nil {
+		t.Fatalf("marshal after input: %v", err)
 	}
-	if _, ok := res["c_cast_not_null"]; ok {
-		t.Error("original constraint key should be removed for cast syntax")
+
+	firstErr := compareSchemas(before, after)
+	secondErr := compareSchemas(before, after)
+	if !errors.Is(firstErr, ErrSnapshotsDiffer()) || !errors.Is(secondErr, ErrSnapshotsDiffer()) {
+		t.Fatalf("comparison errors = (%v, %v), want ErrSnapshotsDiffer twice", firstErr, secondErr)
+	}
+	if firstErr.Error() != secondErr.Error() {
+		t.Fatalf("repeated comparison changed result:\nfirst: %v\nsecond: %v", firstErr, secondErr)
+	}
+
+	gotBeforeBytes, err := marshalSnapshot(before)
+	if err != nil {
+		t.Fatalf("marshal compared before input: %v", err)
+	}
+	gotAfterBytes, err := marshalSnapshot(after)
+	if err != nil {
+		t.Fatalf("marshal compared after input: %v", err)
+	}
+	if string(gotBeforeBytes) != string(beforeBytes) {
+		t.Fatalf("before input changed:\nbefore comparison:\n%s\nafter comparison:\n%s", beforeBytes, gotBeforeBytes)
+	}
+	if string(gotAfterBytes) != string(afterBytes) {
+		t.Fatalf("after input changed:\nbefore comparison:\n%s\nafter comparison:\n%s", afterBytes, gotAfterBytes)
 	}
 }

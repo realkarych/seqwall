@@ -233,6 +233,111 @@ func TestPostgresConstraintForeignKeyEnforcement(t *testing.T) {
 	}
 }
 
+func TestPostgresNotNullRecreation(t *testing.T) {
+	s := newPostgresIntegrationWorker(t, 1)
+	schema := pq.QuoteIdentifier(s.schemas[0])
+	table := schema + ".not_null_recreation"
+	columnNames := []string{"имя", "with space", "price$", "a.b", `embedded"quote`}
+	definitions := make([]string, 0, len(columnNames))
+	for _, columnName := range columnNames {
+		definitions = append(definitions, pq.QuoteIdentifier(columnName)+" integer NOT NULL")
+	}
+	create := "CREATE TABLE " + table + " (" + strings.Join(definitions, ", ") + ")"
+
+	postgresExec(t, s, create)
+	before := postgresSnapshot(t, s)
+	for _, columnName := range columnNames {
+		assertColumnNullable(t, before, s.schemas[0]+".not_null_recreation", columnName, "NO")
+	}
+	postgresExec(t, s, "DROP TABLE "+table)
+	postgresExec(t, s, create)
+	after := postgresSnapshot(t, s)
+	if err := compareSchemas(before, after); err != nil {
+		t.Fatalf("identical NOT NULL recreation changed snapshot: %v", err)
+	}
+
+	postgresExec(t, s, "CREATE TABLE "+schema+".a_b (c integer NOT NULL)")
+	postgresExec(t, s, "CREATE TABLE "+schema+".a (b_c integer NOT NULL)")
+	postgresExec(t, s, "CREATE TABLE "+schema+".named_checks (c integer CONSTRAINT native_nn NOT NULL, CONSTRAINT a_b_c_not_null CHECK (c IS NOT NULL), CONSTRAINT explicit_check CHECK (c IS NOT NULL))")
+	baseline := postgresSnapshot(t, s)
+	assertColumnNullable(t, baseline, s.schemas[0]+".a_b", "c", "NO")
+	assertColumnNullable(t, baseline, s.schemas[0]+".a", "b_c", "NO")
+	assertConstraint(t, baseline.Constraints[s.schemas[0]+".named_checks.a_b_c_not_null"], s.schemas[0], "named_checks", "CHECK", "CHECK ((c IS NOT NULL))")
+	assertConstraint(t, baseline.Constraints[s.schemas[0]+".named_checks.explicit_check"], s.schemas[0], "named_checks", "CHECK", "CHECK ((c IS NOT NULL))")
+
+	version := postgresServerVersion(t, s)
+	if version >= 180000 {
+		assertConstraint(t, baseline.Constraints[s.schemas[0]+".a_b.a_b_c_not_null"], s.schemas[0], "a_b", "NOT NULL", "NOT NULL c")
+		assertConstraint(t, baseline.Constraints[s.schemas[0]+".a.a_b_c_not_null1"], s.schemas[0], "a", "NOT NULL", "NOT NULL b_c")
+		assertConstraint(t, baseline.Constraints[s.schemas[0]+".named_checks.native_nn"], s.schemas[0], "named_checks", "NOT NULL", "NOT NULL c")
+	}
+
+	postgresExec(t, s, "ALTER TABLE "+schema+".a_b ALTER COLUMN c DROP NOT NULL")
+	nullabilityChanged := postgresSnapshot(t, s)
+	assertColumnNullable(t, nullabilityChanged, s.schemas[0]+".a_b", "c", "YES")
+	assertColumnNullable(t, nullabilityChanged, s.schemas[0]+".a", "b_c", "NO")
+	assertSnapshotsDiffer(t, baseline, nullabilityChanged)
+
+	postgresExec(t, s, "ALTER TABLE "+schema+".named_checks RENAME CONSTRAINT a_b_c_not_null TO renamed_check")
+	renamed := postgresSnapshot(t, s)
+	assertConstraint(t, renamed.Constraints[s.schemas[0]+".named_checks.renamed_check"], s.schemas[0], "named_checks", "CHECK", "CHECK ((c IS NOT NULL))")
+	assertSnapshotsDiffer(t, nullabilityChanged, renamed)
+	postgresExec(t, s, "ALTER TABLE "+schema+".named_checks RENAME CONSTRAINT renamed_check TO a_b_c_not_null")
+	if err := compareSchemas(nullabilityChanged, postgresSnapshot(t, s)); err != nil {
+		t.Fatalf("restoring explicit CHECK name changed snapshot: %v", err)
+	}
+
+	postgresExec(t, s, "ALTER TABLE "+schema+".named_checks DROP CONSTRAINT explicit_check")
+	dropped := postgresSnapshot(t, s)
+	assertColumnNullable(t, dropped, s.schemas[0]+".named_checks", "c", "NO")
+	assertSnapshotsDiffer(t, nullabilityChanged, dropped)
+}
+
+func TestPostgresNotNullConstraintMetadata(t *testing.T) {
+	s := newPostgresIntegrationWorker(t, 1)
+	version := postgresServerVersion(t, s)
+	if version < 180000 {
+		t.Skipf("PostgreSQL %d does not expose NOT NULL constraints", version)
+	}
+	schema := pq.QuoteIdentifier(s.schemas[0])
+	table := schema + ".items"
+	postgresExec(t, s, "CREATE TABLE "+table+" (x integer)")
+	postgresExec(t, s, "ALTER TABLE "+table+" ADD CONSTRAINT nn NOT NULL x NOT VALID")
+	postgresExec(t, s, "ALTER TABLE "+table+" ADD CONSTRAINT check_nn CHECK (x IS NOT NULL)")
+	key := s.schemas[0] + ".items.nn"
+	checkKey := s.schemas[0] + ".items.check_nn"
+
+	before := postgresSnapshot(t, s)
+	assertConstraint(t, before.Constraints[key], s.schemas[0], "items", "NOT NULL", "NOT NULL x NOT VALID")
+	assertConstraint(t, before.Constraints[checkKey], s.schemas[0], "items", "CHECK", "CHECK ((x IS NOT NULL))")
+	if before.Constraints[key].Validated || before.Constraints[key].NoInherit || !before.Constraints[key].Enforced {
+		t.Fatalf("initial NOT NULL metadata = %+v, want enforced, not validated, and inheritable", before.Constraints[key])
+	}
+
+	postgresExec(t, s, "ALTER TABLE "+table+" VALIDATE CONSTRAINT nn")
+	validated := postgresSnapshot(t, s)
+	if !validated.Constraints[key].Validated {
+		t.Fatalf("validated NOT NULL metadata = %+v, want validated", validated.Constraints[key])
+	}
+	assertSnapshotsDiffer(t, before, validated)
+
+	postgresExec(t, s, "ALTER TABLE "+table+" ALTER CONSTRAINT nn NO INHERIT")
+	noInherit := postgresSnapshot(t, s)
+	if !noInherit.Constraints[key].NoInherit {
+		t.Fatalf("NO INHERIT NOT NULL metadata = %+v, want no_inherit", noInherit.Constraints[key])
+	}
+	assertSnapshotsDiffer(t, validated, noInherit)
+
+	postgresExec(t, s, "ALTER TABLE "+table+" RENAME CONSTRAINT nn TO renamed_nn")
+	renamed := postgresSnapshot(t, s)
+	if _, ok := renamed.Constraints[key]; ok {
+		t.Fatalf("old NOT NULL constraint key %q remains after rename", key)
+	}
+	assertConstraint(t, renamed.Constraints[s.schemas[0]+".items.renamed_nn"], s.schemas[0], "items", "NOT NULL", "NOT NULL x NO INHERIT")
+	assertConstraint(t, renamed.Constraints[checkKey], s.schemas[0], "items", "CHECK", "CHECK ((x IS NOT NULL))")
+	assertSnapshotsDiffer(t, noInherit, renamed)
+}
+
 func createConstraintTables(t *testing.T, s *StaircaseWorker, schema, constraint string) {
 	t.Helper()
 	postgresExec(t, s, "CREATE TABLE "+schema+".parent (id integer PRIMARY KEY)")
@@ -258,6 +363,23 @@ func assertSnapshotsDiffer(t *testing.T, before, after *driver.SchemaSnapshot) {
 	if err := compareSchemas(before, after); !errors.Is(err, ErrSnapshotsDiffer()) {
 		t.Fatalf("schema comparison error = %v, want ErrSnapshotsDiffer", err)
 	}
+}
+
+func assertColumnNullable(t *testing.T, snapshot *driver.SchemaSnapshot, tableKey, columnName, want string) {
+	t.Helper()
+	table, ok := snapshot.Tables[tableKey]
+	if !ok {
+		t.Fatalf("table %q missing from snapshot", tableKey)
+	}
+	for _, column := range table.Columns {
+		if column.ColumnName == columnName {
+			if column.IsNullable != want {
+				t.Fatalf("column %q.%q nullability = %q, want %q", tableKey, columnName, column.IsNullable, want)
+			}
+			return
+		}
+	}
+	t.Fatalf("column %q.%q missing from snapshot", tableKey, columnName)
 }
 
 func postgresServerVersion(t *testing.T, s *StaircaseWorker) int {

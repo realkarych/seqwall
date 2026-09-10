@@ -3,7 +3,6 @@ package seqwall
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/realkarych/seqwall/pkg/driver"
@@ -29,8 +28,6 @@ func diffJSON(a, b []byte) (string, error) {
 }
 
 func compareSchemas(before, after *driver.SchemaSnapshot) error {
-	before.Constraints = normalizeConstraints(before.Constraints)
-	after.Constraints = normalizeConstraints(after.Constraints)
 	b, err := marshalSnapshot(before)
 	if err != nil {
 		return fmt.Errorf("marshal before: %w", err)
@@ -47,26 +44,4 @@ func compareSchemas(before, after *driver.SchemaSnapshot) error {
 		return fmt.Errorf("%w:\n%s", ErrSnapshotsDiffer(), out)
 	}
 	return nil
-}
-
-func normalizeConstraints(src map[string]driver.ConstraintDefinition) map[string]driver.ConstraintDefinition {
-	checkNullConstraintSubmatchCount := 2
-	res := make(map[string]driver.ConstraintDefinition)
-	re := regexp.MustCompile(`^([A-Za-z0-9_]+)(?:::[A-Za-z0-9_]+)?\s+IS\s+NOT\s+NULL$`)
-	for _, c := range src {
-		if c.ConstraintType == "CHECK" && c.Definition.Valid {
-			if m := re.FindStringSubmatch(c.Definition.String); len(m) == checkNullConstraintSubmatchCount {
-				k := c.TableName + "_" + m[1] + "_not_null"
-				res[k] = c
-				continue
-			}
-		}
-	}
-	for k, c := range src {
-		if c.ConstraintType == "CHECK" && c.Definition.Valid && re.MatchString(c.Definition.String) {
-			continue
-		}
-		res[k] = c
-	}
-	return res
 }
