@@ -261,10 +261,10 @@ func (s *StaircaseWorker) makeSchemaSnapshot() (*driver.SchemaSnapshot, error) {
 func (s *StaircaseWorker) scanTables(snapshot *driver.SchemaSnapshot) error {
 	tablesQuery := fmt.Sprintf(
 		`
-            SELECT tablename
+            SELECT pg_catalog.format('%%I.%%I', schemaname, tablename)
             FROM pg_catalog.pg_tables
             WHERE %s
-            ORDER BY tablename;
+            ORDER BY schemaname, tablename;
         `,
 		s.buildSchemaCond("schemaname"),
 	)
@@ -312,7 +312,7 @@ func (s *StaircaseWorker) scanColumns(snapshot *driver.SchemaSnapshot) error {
 func (s *StaircaseWorker) buildColumnsQuery() string {
 	return fmt.Sprintf(`
         SELECT
-            c.table_name,
+            pg_catalog.format('%%I.%%I', c.table_schema, c.table_name),
             c.column_name,
             c.data_type,
             c.udt_name,
@@ -343,7 +343,7 @@ func (s *StaircaseWorker) buildColumnsQuery() string {
         JOIN pg_catalog.pg_type t
             ON t.oid = a.atttypid
         WHERE %s
-        ORDER BY c.table_name, c.ordinal_position;
+        ORDER BY c.table_schema, c.table_name, c.ordinal_position;
     `, s.buildSchemaCond("c.table_schema"))
 }
 
@@ -407,10 +407,11 @@ func (s *StaircaseWorker) scanViews(snapshot *driver.SchemaSnapshot) error {
 	viewsQuery := fmt.Sprintf(
 		`
             SELECT
-                viewname AS table_name,
+                pg_catalog.format('%%I.%%I', schemaname, viewname),
                 definition
             FROM pg_views
-            WHERE %s;
+            WHERE %s
+            ORDER BY schemaname, viewname;
         `,
 		s.buildSchemaCond("schemaname"),
 	)
@@ -438,10 +439,10 @@ func (s *StaircaseWorker) scanViews(snapshot *driver.SchemaSnapshot) error {
 func (s *StaircaseWorker) scanIndexes(snapshot *driver.SchemaSnapshot) error {
 	indexesQuery := fmt.Sprintf(
 		`
-            SELECT indexname, indexdef
+            SELECT pg_catalog.format('%%I.%%I', schemaname, indexname), indexdef
             FROM pg_indexes
             WHERE %s
-            ORDER BY indexname;
+            ORDER BY schemaname, indexname;
         `,
 		s.buildSchemaCond("schemaname"),
 	)
@@ -470,6 +471,7 @@ func (s *StaircaseWorker) scanConstraints(snapshot *driver.SchemaSnapshot) error
 	constraintsQuery := fmt.Sprintf(
 		`
             SELECT
+                pg_catalog.format('%%I.%%I.%%I', tc.table_schema, tc.table_name, tc.constraint_name),
                 tc.constraint_name,
                 tc.table_name,
                 tc.constraint_type,
@@ -477,7 +479,8 @@ func (s *StaircaseWorker) scanConstraints(snapshot *driver.SchemaSnapshot) error
             FROM information_schema.table_constraints tc
             LEFT JOIN information_schema.check_constraints cc
                    ON tc.constraint_name = cc.constraint_name
-            WHERE %s;
+            WHERE %s
+            ORDER BY tc.table_schema, tc.table_name, tc.constraint_name;
         `,
 		s.buildSchemaCond("tc.table_schema"),
 	)
@@ -488,10 +491,12 @@ func (s *StaircaseWorker) scanConstraints(snapshot *driver.SchemaSnapshot) error
 	defer constrRows.Rows.Close()
 	for constrRows.Rows.Next() {
 		var (
-			constraintName, tableName, constraintType string
-			checkClause                               sql.NullString
+			constraintKey, constraintName string
+			tableName, constraintType     string
+			checkClause                   sql.NullString
 		)
 		if err := constrRows.Rows.Scan(
+			&constraintKey,
 			&constraintName,
 			&tableName,
 			&constraintType,
@@ -499,7 +504,7 @@ func (s *StaircaseWorker) scanConstraints(snapshot *driver.SchemaSnapshot) error
 		); err != nil {
 			return fmt.Errorf("scan constraint row: %w", err)
 		}
-		snapshot.Constraints[constraintName] = driver.ConstraintDefinition{
+		snapshot.Constraints[constraintKey] = driver.ConstraintDefinition{
 			TableName:      tableName,
 			ConstraintType: constraintType,
 			Definition:     checkClause,
@@ -515,13 +520,13 @@ func (s *StaircaseWorker) scanEnums(snapshot *driver.SchemaSnapshot) error {
 	enumQuery := fmt.Sprintf(
 		`
             SELECT
-                t.typname,
+                pg_catalog.format('%%I.%%I', n.nspname, t.typname),
                 e.enumlabel
             FROM pg_type t
             JOIN pg_enum e ON t.oid = e.enumtypid
             JOIN pg_namespace n ON n.oid = t.typnamespace
             WHERE %s
-            ORDER BY t.typname, e.enumsortorder;
+            ORDER BY n.nspname, t.typname, e.enumsortorder;
         `,
 		s.buildSchemaCond("n.nspname"),
 	)
@@ -552,6 +557,7 @@ func (s *StaircaseWorker) scanFks(snapshot *driver.SchemaSnapshot) error {
 	foreignKeysQuery := fmt.Sprintf(
 		`
             SELECT
+                pg_catalog.format('%%I.%%I.%%I', tc.table_schema, tc.table_name, tc.constraint_name),
                 tc.constraint_name,
                 tc.table_name,
                 kcu.column_name,
@@ -564,7 +570,8 @@ func (s *StaircaseWorker) scanFks(snapshot *driver.SchemaSnapshot) error {
             JOIN information_schema.referential_constraints  AS rc  ON tc.constraint_name = rc.constraint_name
             JOIN information_schema.constraint_column_usage  AS ccu ON ccu.constraint_name = tc.constraint_name
             WHERE tc.constraint_type = 'FOREIGN KEY'
-              AND %s;
+              AND %s
+            ORDER BY tc.table_schema, tc.table_name, tc.constraint_name, kcu.ordinal_position;
         `,
 		s.buildSchemaCond("tc.table_schema"),
 	)
@@ -575,11 +582,13 @@ func (s *StaircaseWorker) scanFks(snapshot *driver.SchemaSnapshot) error {
 	defer rows.Rows.Close()
 	for rows.Rows.Next() {
 		var (
-			constraintName, tableName, columnName string
-			foreignTableName, foreignColumnName   string
-			updateRule, deleteRule                string
+			constraintKey, constraintName       string
+			tableName, columnName               string
+			foreignTableName, foreignColumnName string
+			updateRule, deleteRule              string
 		)
 		if err := rows.Rows.Scan(
+			&constraintKey,
 			&constraintName,
 			&tableName,
 			&columnName,
@@ -590,7 +599,7 @@ func (s *StaircaseWorker) scanFks(snapshot *driver.SchemaSnapshot) error {
 		); err != nil {
 			return fmt.Errorf("scan foreign key row: %w", err)
 		}
-		snapshot.ForeignKeys[constraintName] = driver.ForeignKeyDefinition{
+		snapshot.ForeignKeys[constraintKey] = driver.ForeignKeyDefinition{
 			ConstraintName:    constraintName,
 			TableName:         tableName,
 			ColumnName:        columnName,
@@ -610,6 +619,7 @@ func (s *StaircaseWorker) scanTriggers(snapshot *driver.SchemaSnapshot) error {
 	triggersQuery := fmt.Sprintf(
 		`
             SELECT
+                pg_catalog.format('%%I.%%I.%%I', event_object_schema, event_object_table, trigger_name),
                 trigger_name,
                 event_manipulation,
                 event_object_table,
@@ -617,7 +627,7 @@ func (s *StaircaseWorker) scanTriggers(snapshot *driver.SchemaSnapshot) error {
                 action_statement
             FROM information_schema.triggers
             WHERE %s
-            ORDER BY trigger_name;
+            ORDER BY event_object_schema, event_object_table, trigger_name, event_manipulation;
         `,
 		s.buildSchemaCond("trigger_schema"),
 	)
@@ -631,10 +641,12 @@ func (s *StaircaseWorker) scanTriggers(snapshot *driver.SchemaSnapshot) error {
 	}
 	for rows.Rows.Next() {
 		var (
-			triggerName, eventManipulation, eventObjectTable string
-			actionTiming, actionStatement                    string
+			triggerKey, triggerName, eventManipulation string
+			eventObjectTable                           string
+			actionTiming, actionStatement              string
 		)
 		if err := rows.Rows.Scan(
+			&triggerKey,
 			&triggerName,
 			&eventManipulation,
 			&eventObjectTable,
@@ -643,7 +655,7 @@ func (s *StaircaseWorker) scanTriggers(snapshot *driver.SchemaSnapshot) error {
 		); err != nil {
 			return fmt.Errorf("scan trigger row: %w", err)
 		}
-		snapshot.Triggers[triggerName] = driver.TriggerDefinition{
+		snapshot.Triggers[triggerKey] = driver.TriggerDefinition{
 			TriggerName:       triggerName,
 			EventManipulation: eventManipulation,
 			EventObjectTable:  eventObjectTable,
@@ -703,10 +715,11 @@ func (s *StaircaseWorker) scanFunctions(snapshot *driver.SchemaSnapshot) error {
 func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 	seqQuery := fmt.Sprintf(
 		`
-            SELECT sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
+            SELECT pg_catalog.format('%%I.%%I', sequence_schema, sequence_name),
+                   sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
             FROM information_schema.sequences
             WHERE %s
-            ORDER BY sequence_name;
+            ORDER BY sequence_schema, sequence_name;
         `,
 		s.buildSchemaCond("sequence_schema"),
 	)
@@ -720,11 +733,13 @@ func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 	}
 	for rows.Rows.Next() {
 		var (
-			sequenceName, dataType, startValue string
-			minValue, maxValue, increment      string
-			cycleOption                        string
+			sequenceKey, sequenceName, dataType string
+			startValue                          string
+			minValue, maxValue, increment       string
+			cycleOption                         string
 		)
 		if err := rows.Rows.Scan(
+			&sequenceKey,
 			&sequenceName,
 			&dataType,
 			&startValue,
@@ -735,7 +750,7 @@ func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 		); err != nil {
 			return fmt.Errorf("scan sequence row: %w", err)
 		}
-		snapshot.Sequences[sequenceName] = driver.SequenceDefinition{
+		snapshot.Sequences[sequenceKey] = driver.SequenceDefinition{
 			SequenceName: sequenceName,
 			DataType:     dataType,
 			StartValue:   startValue,
@@ -755,11 +770,12 @@ func (s *StaircaseWorker) scanMatViews(snapshot *driver.SchemaSnapshot) error {
 	matviewsQuery := fmt.Sprintf(
 		`
             SELECT
-                matviewname AS table_name,
+                pg_catalog.format('%%I.%%I', schemaname, matviewname),
                 definition,
                 ispopulated
             FROM pg_matviews
-            WHERE %s;
+            WHERE %s
+            ORDER BY schemaname, matviewname;
         `,
 		s.buildSchemaCond("schemaname"),
 	)
@@ -792,10 +808,10 @@ func (s *StaircaseWorker) scanMatViews(snapshot *driver.SchemaSnapshot) error {
 func (s *StaircaseWorker) scanPrivileges(snapshot *driver.SchemaSnapshot) error {
 	privQuery := fmt.Sprintf(
 		`
-            SELECT grantee, table_name, privilege_type, is_grantable
+            SELECT table_schema, grantee, table_name, privilege_type, is_grantable
 		    FROM information_schema.role_table_grants
 		    WHERE %s
-		    ORDER BY grantee, table_name, privilege_type, is_grantable;
+		    ORDER BY table_schema, table_name, grantee, privilege_type, is_grantable;
         `,
 		s.buildSchemaCond("table_schema"),
 	)
@@ -806,11 +822,12 @@ func (s *StaircaseWorker) scanPrivileges(snapshot *driver.SchemaSnapshot) error 
 	defer rows.Rows.Close()
 	var privs []driver.PrivilegeDefinition
 	for rows.Rows.Next() {
-		var grantee, tableName, privilegeType, isGrantable string
-		if err := rows.Rows.Scan(&grantee, &tableName, &privilegeType, &isGrantable); err != nil {
+		var tableSchema, grantee, tableName, privilegeType, isGrantable string
+		if err := rows.Rows.Scan(&tableSchema, &grantee, &tableName, &privilegeType, &isGrantable); err != nil {
 			return fmt.Errorf("scan privilege row: %w", err)
 		}
 		privs = append(privs, driver.PrivilegeDefinition{
+			TableSchema: tableSchema,
 			Grantee:     grantee,
 			TableName:   tableName,
 			Privilege:   privilegeType,

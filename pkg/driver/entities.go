@@ -100,6 +100,7 @@ type MatViewDefinition struct {
 }
 
 type PrivilegeDefinition struct {
+	TableSchema string `db:"table_schema"   json:"table_schema"`
 	Grantee     string `db:"grantee"        json:"grantee"`
 	TableName   string `db:"table_name"     json:"table_name"`
 	Privilege   string `db:"privilege_type" json:"privilege_type"`
