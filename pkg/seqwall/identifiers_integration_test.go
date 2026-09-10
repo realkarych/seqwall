@@ -15,7 +15,7 @@ func TestPostgresSnapshotQuotedTableAndColumnIdentifiers(t *testing.T) {
 	postgresExec(t, s, "CREATE TABLE "+schema+"."+pq.QuoteIdentifier(tableName)+" ("+pq.QuoteIdentifier(columnName)+" integer NOT NULL)")
 
 	snapshot := postgresSnapshot(t, s)
-	table, ok := snapshot.Tables[tableName]
+	table, ok := snapshot.Tables[s.schemas[0]+`."Order.Items Details"`]
 	if !ok {
 		t.Fatalf("quoted table %q missing from snapshot", tableName)
 	}
@@ -38,7 +38,7 @@ func TestPostgresSnapshotDoesNotDuplicateColumnsForSameNamedTypes(t *testing.T) 
 	postgresExec(t, s, "CREATE TABLE "+selectedSchema+".typed_rows (state "+selectedSchema+"."+typeName+")")
 
 	snapshot := postgresSnapshot(t, s)
-	columns := snapshot.Tables["typed_rows"].Columns
+	columns := snapshot.Tables[s.schemas[0]+".typed_rows"].Columns
 	if len(columns) != 1 {
 		t.Fatalf("typed_rows has %d columns, want 1: %+v", len(columns), columns)
 	}
@@ -76,7 +76,7 @@ func TestPostgresSnapshotEnumDomainRecreation(t *testing.T) {
 			if err := compareSchemas(before, after); err != nil {
 				t.Fatalf("identical enum-domain recreation changed snapshot: %v", err)
 			}
-			columns := after.Tables["items"].Columns
+			columns := after.Tables[s.schemas[0]+".items"].Columns
 			if len(columns) != 2 {
 				t.Fatalf("items has %d columns, want 2: %+v", len(columns), columns)
 			}
@@ -103,7 +103,7 @@ func TestPostgresSnapshotViewOutsideSearchPath(t *testing.T) {
 	postgresExec(t, s, "CREATE VIEW "+schema+"."+pq.QuoteIdentifier(viewName)+" AS SELECT 1 AS "+pq.QuoteIdentifier("View Value"))
 
 	snapshot := postgresSnapshot(t, s)
-	view, ok := snapshot.Views[viewName]
+	view, ok := snapshot.Views[s.schemas[0]+`."Quarterly.Report View"`]
 	if !ok {
 		t.Fatalf("quoted view %q missing from snapshot", viewName)
 	}
@@ -119,7 +119,7 @@ func TestPostgresSnapshotMaterializedViewOutsideSearchPath(t *testing.T) {
 	postgresExec(t, s, "CREATE MATERIALIZED VIEW "+schema+"."+pq.QuoteIdentifier(viewName)+" AS SELECT 1 AS "+pq.QuoteIdentifier("Materialized Value"))
 
 	snapshot := postgresSnapshot(t, s)
-	view, ok := snapshot.MatViews[viewName]
+	view, ok := snapshot.MatViews[s.schemas[0]+`."Materialized.Report View"`]
 	if !ok {
 		t.Fatalf("quoted materialized view %q missing from snapshot", viewName)
 	}

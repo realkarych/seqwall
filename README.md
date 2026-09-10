@@ -105,12 +105,13 @@ Each migration must be reversible and must not break the schema if applied, reve
 
 ### Snapshots reveal the truth
 
-After each migration, Seqwall captures the schema using **`information_schema` views**,
-adhering to the **<a href="https://www.iso.org/standard/76586.html">ISO/IEC 9075-11</a> SQL standard**.
+After each migration, Seqwall captures schema metadata using **`information_schema` views**
+and **PostgreSQL system catalogs**.
 
 This includes *tables*, *columns*, *constraints*, *indexes*, *views*,
 *triggers*, *functions*, *enums*, *sequences*, and *foreign keys*.
-The snapshots are then compared using structured diffs, allowing detection of even subtle schema differences or mismatches.
+The snapshots are then compared using structured diffs. This comparison covers the captured metadata
+in the selected schemas; it does not establish universal database equivalence.
 
 ### `Staircase` testing guarantees *schema* consistency
 

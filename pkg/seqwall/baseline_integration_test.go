@@ -116,10 +116,10 @@ func TestPostgresReversibleFirstMigrationRetainsInitialSchema(t *testing.T) {
 		t.Fatalf("processStaircase() unexpected error: %v", err)
 	}
 	snapshot := postgresSnapshot(t, worker)
-	if _, ok := snapshot.Tables["unrelated"]; !ok {
+	if _, ok := snapshot.Tables[schema+".unrelated"]; !ok {
 		t.Fatal("pre-existing unrelated table was not retained")
 	}
-	if _, ok := snapshot.Tables["created"]; !ok {
+	if _, ok := snapshot.Tables[schema+".created"]; !ok {
 		t.Fatal("re-applied migration table was not retained")
 	}
 }
