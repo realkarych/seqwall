@@ -77,9 +77,11 @@ type TriggerDefinition struct {
 }
 
 type FunctionDefinition struct {
-	RoutineName string `db:"routine_name" json:"routine_name"`
-	RoutineType string `db:"routine_type" json:"routine_type"`
-	ReturnType  string `db:"return_type"  json:"return_type"`
+	RoutineName     string `db:"routine_name"     json:"routine_name"`
+	RoutineType     string `db:"routine_type"     json:"routine_type"`
+	ReturnType      string `db:"return_type"      json:"return_type"`
+	RoutineIdentity string `db:"routine_identity" json:"routine_identity"`
+	Definition      string `db:"definition"       json:"definition"`
 }
 
 type SequenceDefinition struct {
