@@ -34,7 +34,8 @@ docker-build:
 
 ## Run staircase tests inside the Docker container for each PostgreSQL version
 docker-test: docker-build
-	@for v in $(PG_VERS); do \
+	@set -e; \
+	for v in $(PG_VERS); do \
 		echo "👉 testing on PostgreSQL $$v ..."; \
 		docker run --rm -v $$PWD:/work -e PG_VERSION=$$v -e PGPORT=$(PGPORT) $(TEST_IMAGE); \
 	done

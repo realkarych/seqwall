@@ -41,11 +41,12 @@ run_one() {
   seqwall staircase \
     --migrations-path "$dir" \
     --upgrade 'MIGRATION_FILE="{current_migration}"; \
-      TMPDIR=$(mktemp -d); \
-      cp "$MIGRATION_FILE" "$TMPDIR"; \
-      DBMATE_MIGRATIONS_DIR="$TMPDIR" \
-      dbmate --no-dump-schema up; \
-      rm -rf "$TMPDIR"' \
+      MIGRATION_TMPDIR=$(mktemp -d); \
+      cleanup_migration_dir() { rm -rf "$MIGRATION_TMPDIR"; }; \
+      trap cleanup_migration_dir EXIT; \
+      cp "$MIGRATION_FILE" "$MIGRATION_TMPDIR"; \
+      DBMATE_MIGRATIONS_DIR="$MIGRATION_TMPDIR" \
+      dbmate --no-dump-schema up' \
     --downgrade 'DBMATE_MIGRATIONS_DIR="'"$dir"'" \
       dbmate --no-dump-schema down' \
     --postgres-url "$DATABASE_URL"
