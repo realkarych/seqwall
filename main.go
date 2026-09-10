@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 
-	_ "github.com/lib/pq"
 	"github.com/realkarych/seqwall/pkg/seqwall"
 	"github.com/spf13/cobra"
 )

@@ -2,9 +2,14 @@ package driver
 
 import (
 	"database/sql"
+	sqldriver "database/sql/driver"
 	"fmt"
 	"strings"
+
+	"github.com/lib/pq"
 )
+
+var _ sqldriver.Driver = (*pq.Driver)(nil)
 
 type PostgresClient struct {
 	conn *sql.DB
@@ -16,6 +21,7 @@ func NewPostgresClient(postgresPath string) (*PostgresClient, error) {
 		return nil, err
 	}
 	if err := db.Ping(); err != nil {
+		_ = db.Close()
 		return nil, err
 	}
 	return &PostgresClient{conn: db}, nil
