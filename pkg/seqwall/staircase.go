@@ -319,10 +319,15 @@ func (s *StaircaseWorker) buildColumnsQuery() string {
             c.udt_name,
             t.typtype,
             t.typcategory,
-            CASE WHEN t.typtype = 'e' OR (t.typtype = 'd' AND t.typcategory = 'E')
-                THEN 0 ELSE a.atttypid END AS type_oid,
+            a.atttypid AS type_oid,
+            CASE WHEN element.oid IS NULL
+                THEN pg_catalog.format('%%I.%%I', type_namespace.nspname, t.typname)
+                ELSE pg_catalog.format('%%I.%%I[]', element_namespace.nspname, element.typname)
+            END AS type_identity,
+            a.atttypmod AS type_modifier,
             c.datetime_precision,
             c.is_nullable,
+            collation_namespace.nspname,
             c.collation_name,
             c.is_identity,
             c.identity_generation,
@@ -343,6 +348,16 @@ func (s *StaircaseWorker) buildColumnsQuery() string {
             AND a.attname = c.column_name
         JOIN pg_catalog.pg_type t
             ON t.oid = a.atttypid
+        JOIN pg_catalog.pg_namespace type_namespace
+            ON type_namespace.oid = t.typnamespace
+        LEFT JOIN pg_catalog.pg_type element
+            ON element.typarray = t.oid
+        LEFT JOIN pg_catalog.pg_namespace element_namespace
+            ON element_namespace.oid = element.typnamespace
+        LEFT JOIN pg_catalog.pg_collation coll
+            ON coll.oid = a.attcollation
+        LEFT JOIN pg_catalog.pg_namespace collation_namespace
+            ON collation_namespace.oid = coll.collnamespace
         WHERE %s
         ORDER BY c.table_schema, c.table_name, c.ordinal_position;
     `, s.buildSchemaCond("c.table_schema"))
@@ -352,10 +367,12 @@ func scanColumnRow(rows *driver.QueryResult) (driver.ColumnDefinition, string, e
 	var (
 		table, name, dtype, udt       string
 		typtype, typcategory          string
-		typeOID                       int
+		typeOID, typeModifier         int
+		typeIdentity                  string
 		dtp                           sql.NullInt64
 		nullable, identity, generated string
-		genExpr, def, coll, idGen     sql.NullString
+		genExpr, def, collSchema      sql.NullString
+		coll, idGen                   sql.NullString
 		charLen, numPrec, numScale    sql.NullInt64
 	)
 	if err := rows.Rows.Scan(
@@ -366,8 +383,11 @@ func scanColumnRow(rows *driver.QueryResult) (driver.ColumnDefinition, string, e
 		&typtype,
 		&typcategory,
 		&typeOID,
+		&typeIdentity,
+		&typeModifier,
 		&dtp,
 		&nullable,
+		&collSchema,
 		&coll,
 		&identity,
 		&idGen,
@@ -394,11 +414,14 @@ func scanColumnRow(rows *driver.QueryResult) (driver.ColumnDefinition, string, e
 		IdentityGeneration:     idGen,
 		IsGenerated:            generated,
 		GenerationExpression:   genExpr,
+		CollationSchema:        collSchema,
 		CollationName:          coll,
 		TypeMeta: driver.TypeMeta{
-			Typtype:     typtype,
-			Typcategory: typcategory,
-			TypeOID:     typeOID,
+			Typtype:      typtype,
+			Typcategory:  typcategory,
+			TypeIdentity: typeIdentity,
+			TypeModifier: typeModifier,
+			TypeOID:      typeOID,
 		},
 	}
 	return col, table, nil

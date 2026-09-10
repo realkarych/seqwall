@@ -35,12 +35,19 @@ func TestPostgresSnapshotDoesNotDuplicateColumnsForSameNamedTypes(t *testing.T) 
 	typeName := pq.QuoteIdentifier("status.kind")
 	postgresExec(t, s, "CREATE TYPE "+selectedSchema+"."+typeName+" AS ENUM ('selected')")
 	postgresExec(t, s, "CREATE TYPE "+otherSchema+"."+typeName+" AS ENUM ('other')")
-	postgresExec(t, s, "CREATE TABLE "+selectedSchema+".typed_rows (state "+selectedSchema+"."+typeName+")")
+	postgresExec(t, s, "CREATE TABLE "+selectedSchema+".typed_rows (state "+selectedSchema+"."+typeName+", states "+selectedSchema+"."+typeName+"[])")
 
 	snapshot := postgresSnapshot(t, s)
 	columns := snapshot.Tables[s.schemas[0]+".typed_rows"].Columns
-	if len(columns) != 1 {
-		t.Fatalf("typed_rows has %d columns, want 1: %+v", len(columns), columns)
+	if len(columns) != 2 {
+		t.Fatalf("typed_rows has %d columns, want 2: %+v", len(columns), columns)
+	}
+	wantIdentity := s.schemas[0] + `."status.kind"`
+	if got := columns[0].TypeMeta.TypeIdentity; got != wantIdentity {
+		t.Fatalf("scalar type identity = %q, want %q", got, wantIdentity)
+	}
+	if got := columns[1].TypeMeta.TypeIdentity; got != wantIdentity+"[]" {
+		t.Fatalf("array type identity = %q, want %q", got, wantIdentity+"[]")
 	}
 }
 
@@ -81,16 +88,30 @@ func TestPostgresSnapshotEnumDomainRecreation(t *testing.T) {
 				t.Fatalf("items has %d columns, want 2: %+v", len(columns), columns)
 			}
 			state := columns[0]
-			if state.TypeMeta.Typtype != "d" || state.TypeMeta.Typcategory != "E" || state.TypeMeta.TypeOID != 0 {
-				t.Fatalf("enum-domain metadata = %+v, want domain/enum category with stable OID", state.TypeMeta)
+			wantStateIdentity := s.schemas[0] + ".status_domain"
+			if nested {
+				wantStateIdentity = s.schemas[0] + ".nested_status_domain"
+			}
+			if state.TypeMeta.Typtype != "d" || state.TypeMeta.Typcategory != "E" || state.TypeMeta.TypeOID == 0 || state.TypeMeta.TypeIdentity != wantStateIdentity {
+				t.Fatalf("enum-domain metadata = %+v, want domain/enum category with identity %q and catalog OID", state.TypeMeta, wantStateIdentity)
 			}
 			amount := columns[1]
-			if amount.TypeMeta.Typtype != "d" || amount.TypeMeta.Typcategory != "N" || amount.TypeMeta.TypeOID == 0 {
-				t.Fatalf("integer-domain metadata = %+v, want domain/numeric category with catalog OID", amount.TypeMeta)
+			wantAmountIdentity := s.schemas[0] + ".amount_domain"
+			if amount.TypeMeta.Typtype != "d" || amount.TypeMeta.Typcategory != "N" || amount.TypeMeta.TypeOID == 0 || amount.TypeMeta.TypeIdentity != wantAmountIdentity {
+				t.Fatalf("integer-domain metadata = %+v, want domain/numeric category with identity %q and catalog OID", amount.TypeMeta, wantAmountIdentity)
 			}
 			postgresExec(t, s, "ALTER TABLE "+schema+".items ALTER COLUMN state TYPE "+schema+".status USING state::"+schema+".status")
-			if err := compareSchemas(after, postgresSnapshot(t, s)); err == nil {
+			baseSnapshot := postgresSnapshot(t, s)
+			if err := compareSchemas(after, baseSnapshot); err == nil {
 				t.Fatal("changing an enum-domain column to its base enum did not change the snapshot")
+			}
+			baseState := baseSnapshot.Tables[s.schemas[0]+".items"].Columns[0]
+			wantBaseIdentity := s.schemas[0] + ".status"
+			if baseState.TypeMeta.Typtype != "e" || baseState.TypeMeta.Typcategory != "E" || baseState.TypeMeta.TypeOID == 0 || baseState.TypeMeta.TypeIdentity != wantBaseIdentity {
+				t.Fatalf("base enum metadata = %+v, want enum identity %q and catalog OID", baseState.TypeMeta, wantBaseIdentity)
+			}
+			if baseState.TypeMeta.TypeIdentity == state.TypeMeta.TypeIdentity {
+				t.Fatalf("domain and base enum identities are both %q", baseState.TypeMeta.TypeIdentity)
 			}
 		})
 	}

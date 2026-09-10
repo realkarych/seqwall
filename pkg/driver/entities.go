@@ -13,9 +13,11 @@ type DbClient interface {
 }
 
 type TypeMeta struct {
-	Typtype     string `db:"typtype"     json:"typtype"`
-	Typcategory string `db:"typcategory" json:"typcategory"`
-	TypeOID     int    `db:"type_oid"    json:"type_oid"`
+	Typtype      string `db:"typtype"       json:"typtype"`
+	Typcategory  string `db:"typcategory"   json:"typcategory"`
+	TypeIdentity string `db:"type_identity" json:"type_identity"`
+	TypeModifier int    `db:"type_modifier" json:"type_modifier"`
+	TypeOID      int    `db:"type_oid"      json:"-"`
 }
 
 type ColumnDefinition struct {
@@ -26,6 +28,7 @@ type ColumnDefinition struct {
 	IsNullable             string         `db:"is_nullable"              json:"is_nullable"`
 	IsIdentity             string         `db:"is_identity"              json:"is_identity"`
 	IsGenerated            string         `db:"is_generated"             json:"is_generated"`
+	CollationSchema        sql.NullString `db:"collation_schema"         json:"collation_schema"`
 	CollationName          sql.NullString `db:"collation_name"           json:"collation_name"`
 	IdentityGeneration     sql.NullString `db:"identity_generation"      json:"identity_generation"`
 	GenerationExpression   sql.NullString `db:"generation_expression"    json:"generation_expression"`
