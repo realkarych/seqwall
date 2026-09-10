@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -205,16 +204,7 @@ func (s *StaircaseWorker) executeCommand(command, migration string) (string, err
 		}
 		command = strings.ReplaceAll(command, CurrentMigrationPlaceholder, migration)
 	}
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/C", command)
-	} else {
-		shell := os.Getenv("SHELL")
-		if shell == "" {
-			shell = "sh"
-		}
-		cmd = exec.Command(shell, "-c", command)
-	}
+	cmd := newShellCommand(command)
 	cmd.Env = append(os.Environ(), CurrentMigrationEnv+"="+migration)
 	output, err := cmd.CombinedOutput()
 	if err != nil {

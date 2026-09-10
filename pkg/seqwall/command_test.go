@@ -82,6 +82,9 @@ func TestMigrationCommandHelper(t *testing.T) {
 func commandHelper(t *testing.T) string {
 	t.Helper()
 	t.Setenv("SEQWALL_COMMAND_HELPER", "1")
+	if options := os.Getenv("GORACE"); !strings.Contains(options, "atexit_sleep_ms=") {
+		t.Setenv("GORACE", options+" atexit_sleep_ms=0")
+	}
 	if runtime.GOOS != "windows" {
 		t.Setenv("SHELL", "sh")
 	}

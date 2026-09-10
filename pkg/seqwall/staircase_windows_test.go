@@ -3,7 +3,10 @@
 package seqwall
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -68,5 +71,29 @@ func TestCommandWindowsExecutableWithSpaces(t *testing.T) {
 	result := runCommandResult(t, command, "migration with spaces.sql")
 	if len(result.Args) != 1 || result.Args[0] != "quoted argument" || result.Migration != "migration with spaces.sql" {
 		t.Fatalf("helper result = %+v", result)
+	}
+}
+
+func TestCommandWindowsQuotedBatch(t *testing.T) {
+	for _, status := range []int{0, 42} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "migration helper.bat")
+			body := fmt.Sprintf("@echo OFF\r\nECHO %%~1\r\nEXIT /B %d\r\n", status)
+			if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			command := quoteCommandPath(path) + ` "quoted argument"`
+			output, err := (&StaircaseWorker{}).executeCommand(command, "migration with spaces.sql")
+			if status == 0 && err != nil {
+				t.Fatalf("batch failed: %v; output: %q", err, output)
+			}
+			var exitErr *exec.ExitError
+			if status != 0 && (!errors.As(err, &exitErr) || exitErr.ExitCode() != status) {
+				t.Fatalf("batch error = %v, want status %d", err, status)
+			}
+			if output != "quoted argument\r\n" {
+				t.Fatalf("batch output = %q", output)
+			}
+		})
 	}
 }
