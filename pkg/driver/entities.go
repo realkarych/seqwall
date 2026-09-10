@@ -97,13 +97,18 @@ type FunctionDefinition struct {
 }
 
 type SequenceDefinition struct {
-	SequenceName string `db:"sequence_name" json:"sequence_name"`
-	DataType     string `db:"data_type"     json:"data_type"`
-	StartValue   string `db:"start_value"   json:"start_value"`
-	MinValue     string `db:"min_value"     json:"min_value"`
-	MaxValue     string `db:"max_value"     json:"max_value"`
-	Increment    string `db:"increment"     json:"increment"`
-	CycleOption  string `db:"cycle_option"  json:"cycle_option"`
+	SequenceName  string         `db:"sequence_name"  json:"sequence_name"`
+	DataType      string         `db:"data_type"      json:"data_type"`
+	StartValue    string         `db:"start_value"    json:"start_value"`
+	MinValue      string         `db:"min_value"      json:"min_value"`
+	MaxValue      string         `db:"max_value"      json:"max_value"`
+	Increment     string         `db:"increment"      json:"increment"`
+	CycleOption   string         `db:"cycle_option"   json:"cycle_option"`
+	CacheSize     string         `db:"cache_size"     json:"cache_size"`
+	OwnedBySchema sql.NullString `db:"owned_by_schema" json:"owned_by_schema"`
+	OwnedByTable  sql.NullString `db:"owned_by_table"  json:"owned_by_table"`
+	OwnedByColumn sql.NullString `db:"owned_by_column" json:"owned_by_column"`
+	OwnershipType sql.NullString `db:"ownership_type"  json:"ownership_type"`
 }
 
 type MatViewDefinition struct {

@@ -810,13 +810,44 @@ func (s *StaircaseWorker) scanFunctions(snapshot *driver.SchemaSnapshot) error {
 func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 	seqQuery := fmt.Sprintf(
 		`
-            SELECT pg_catalog.format('%%I.%%I', sequence_schema, sequence_name),
-                   sequence_name, data_type, start_value, minimum_value, maximum_value, increment, cycle_option
-            FROM information_schema.sequences
-            WHERE %s
-            ORDER BY sequence_schema, sequence_name;
-        `,
-		s.buildSchemaCond("sequence_schema"),
+			SELECT pg_catalog.format('%%I.%%I', n.nspname, r.relname),
+			       r.relname,
+			       pg_catalog.format_type(q.seqtypid, NULL),
+			       q.seqstart::text,
+			       q.seqmin::text,
+			       q.seqmax::text,
+			       q.seqincrement::text,
+			       CASE WHEN q.seqcycle THEN 'YES' ELSE 'NO' END,
+			       q.seqcache::text,
+			       owner_namespace.nspname,
+			       owner_relation.relname,
+			       owner_attribute.attname,
+			       dependency.deptype::text
+			FROM pg_catalog.pg_sequence q
+			JOIN pg_catalog.pg_class r ON r.oid = q.seqrelid
+			JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
+			LEFT JOIN LATERAL (
+				SELECT d.refobjid, d.refobjsubid, d.deptype
+				FROM pg_catalog.pg_depend d
+				WHERE d.classid = 'pg_catalog.pg_class'::regclass
+				  AND d.objid = r.oid
+				  AND d.objsubid = 0
+				  AND d.refclassid = 'pg_catalog.pg_class'::regclass
+				  AND d.refobjsubid > 0
+				  AND d.deptype IN ('a', 'i')
+				ORDER BY d.deptype, d.refobjid, d.refobjsubid
+				LIMIT 1
+			) dependency ON true
+			LEFT JOIN pg_catalog.pg_class owner_relation ON owner_relation.oid = dependency.refobjid
+			LEFT JOIN pg_catalog.pg_namespace owner_namespace ON owner_namespace.oid = owner_relation.relnamespace
+			LEFT JOIN pg_catalog.pg_attribute owner_attribute
+			       ON owner_attribute.attrelid = dependency.refobjid
+			      AND owner_attribute.attnum = dependency.refobjsubid
+			      AND NOT owner_attribute.attisdropped
+			WHERE %s
+			ORDER BY n.nspname, r.relname;
+		`,
+		s.buildSchemaCond("n.nspname"),
 	)
 	rows, err := s.dbClient.Execute(seqQuery)
 	if err != nil {
@@ -827,33 +858,26 @@ func (s *StaircaseWorker) scanSeqs(snapshot *driver.SchemaSnapshot) error {
 		snapshot.Sequences = make(map[string]driver.SequenceDefinition)
 	}
 	for rows.Rows.Next() {
-		var (
-			sequenceKey, sequenceName, dataType string
-			startValue                          string
-			minValue, maxValue, increment       string
-			cycleOption                         string
-		)
+		var sequenceKey string
+		var sequence driver.SequenceDefinition
 		if err := rows.Rows.Scan(
 			&sequenceKey,
-			&sequenceName,
-			&dataType,
-			&startValue,
-			&minValue,
-			&maxValue,
-			&increment,
-			&cycleOption,
+			&sequence.SequenceName,
+			&sequence.DataType,
+			&sequence.StartValue,
+			&sequence.MinValue,
+			&sequence.MaxValue,
+			&sequence.Increment,
+			&sequence.CycleOption,
+			&sequence.CacheSize,
+			&sequence.OwnedBySchema,
+			&sequence.OwnedByTable,
+			&sequence.OwnedByColumn,
+			&sequence.OwnershipType,
 		); err != nil {
 			return fmt.Errorf("scan sequence row: %w", err)
 		}
-		snapshot.Sequences[sequenceKey] = driver.SequenceDefinition{
-			SequenceName: sequenceName,
-			DataType:     dataType,
-			StartValue:   startValue,
-			MinValue:     minValue,
-			MaxValue:     maxValue,
-			Increment:    increment,
-			CycleOption:  cycleOption,
-		}
+		snapshot.Sequences[sequenceKey] = sequence
 	}
 	if err := rows.Rows.Err(); err != nil {
 		return fmt.Errorf("iterate sequence rows: %w", err)

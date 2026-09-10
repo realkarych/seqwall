@@ -116,12 +116,15 @@ Column snapshots record effective nullability on every supported PostgreSQL vers
 snapshots also retain native `NOT NULL` names, definitions, validation state, enforcement, and inheritance behavior.
 Trigger snapshots retain complete definitions and enabled state for user-defined triggers, including constraint
 triggers. PostgreSQL-generated internal triggers are excluded, so custom changes to their firing mode are not compared.
-Column references to domain, composite, and range types retain their qualified type identity. Standalone definitions
-for those types are not comprehensively snapshotted: domain checks, defaults, and base-definition changes; composite
-member changes; and range subtype, operator class, canonical, and subtype-difference definitions remain outside
-snapshot coverage. Enum labels are captured. Extension object definitions are also outside comprehensive coverage.
-The snapshots are then compared using structured diffs. This comparison covers the captured metadata
-in the selected schemas; it does not establish universal database equivalence.
+Sequence snapshots retain their numeric type, start, minimum, maximum, increment, cycle and cache configuration,
+plus qualified column ownership for explicit, serial and identity sequences. Runtime counters such as the current or
+last value and `is_called` are data state and are excluded.
+Column references to domain, composite, and range types retain their qualified type identity, and enum labels are
+captured. Snapshot coverage is deliberately bounded: table persistence, row-level security policies, partition and
+inheritance metadata, relation options and ownership, complete domain/composite/range definitions, extension object
+definitions, non-table ACLs, and role-dependent table-grant visibility are not comprehensively captured.
+The snapshots are compared using structured diffs. This comparison covers the captured metadata in the selected
+schemas; it does not establish universal database equivalence or a transactionally consistent view during concurrent DDL.
 
 ### `Staircase` testing guarantees *schema* consistency
 
