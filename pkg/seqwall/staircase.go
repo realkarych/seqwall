@@ -62,11 +62,13 @@ func (s *StaircaseWorker) actualiseDb(migrations []string) error {
 			return fmt.Errorf("apply migration %q (step %d): %w", migration, i+1, err)
 		}
 		log.Println("Migration output:", out)
-		snap, err := s.makeSchemaSnapshot()
-		if err != nil {
-			return fmt.Errorf("snapshot after %q: %w", migration, err)
+		if s.compareSchemaSnapshots {
+			snap, err := s.makeSchemaSnapshot()
+			if err != nil {
+				return fmt.Errorf("snapshot after %q: %w", migration, err)
+			}
+			s.baseline[migration] = snap
 		}
-		s.baseline[migration] = snap
 	}
 	log.Println("Step 1 (actualise db) completed successfully!")
 	return nil
@@ -113,13 +115,16 @@ func (s *StaircaseWorker) processDownUpDown(migs []string) error {
 	steps := s.calculateStairDepth(migs)
 	for i := 1; i <= steps; i++ {
 		mig := migs[len(migs)-i]
-		cur, ok := s.baseline[mig]
-		if !ok {
-			return fmt.Errorf("%w: %s", ErrBaselineNotFound(), mig)
-		}
-		var prev *driver.SchemaSnapshot
-		if idx := len(migs) - i - 1; idx >= 0 {
-			prev = s.baseline[migs[idx]]
+		var cur, prev *driver.SchemaSnapshot
+		if s.compareSchemaSnapshots {
+			var ok bool
+			cur, ok = s.baseline[mig]
+			if !ok {
+				return fmt.Errorf("%w: %s", ErrBaselineNotFound(), mig)
+			}
+			if idx := len(migs) - i - 1; idx >= 0 {
+				prev = s.baseline[migs[idx]]
+			}
 		}
 		if err := s.runDownUpDown(mig, i, cur, prev); err != nil {
 			return err
@@ -138,12 +143,14 @@ func (s *StaircaseWorker) reapplyMigrations(migrations []string) error {
 		}
 		log.Println("Migration output:", out)
 
-		exp, ok := s.baseline[mig]
-		if !ok {
-			return fmt.Errorf("%w: %s", ErrBaselineNotFound(), mig)
-		}
-		if err := s.compareAndSnapshot(exp, fmt.Sprintf("snapshot after re-apply %q", mig)); err != nil {
-			return err
+		if s.compareSchemaSnapshots {
+			exp, ok := s.baseline[mig]
+			if !ok {
+				return fmt.Errorf("%w: %s", ErrBaselineNotFound(), mig)
+			}
+			if err := s.compareAndSnapshot(exp, fmt.Sprintf("snapshot after re-apply %q", mig)); err != nil {
+				return err
+			}
 		}
 	}
 	log.Println("Re-actualise completed successfully!")

@@ -4,10 +4,13 @@
 package seqwall
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/realkarych/seqwall/pkg/driver"
 )
 
 func TestCalculateStairDepth(t *testing.T) {
@@ -94,5 +97,64 @@ func TestExecuteCommand(t *testing.T) {
 	_, err = w.executeCommand(failPath, "dummy")
 	if err == nil {
 		t.Fatalf("executeCommand() expected error, got nil")
+	}
+}
+
+func TestProcessStaircaseWithoutSnapshots(t *testing.T) {
+	migrations := []string{"1.sql", "2.sql", "3.sql"}
+	tests := []struct {
+		name  string
+		depth int
+		want  string
+	}{
+		{name: "all migrations", depth: 0, want: "UUUDUDDUDDUDUUU"},
+		{name: "bounded depth", depth: 2, want: "UUUDUDDUDUU"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logPath := filepath.Join(t.TempDir(), "steps")
+			worker := &StaircaseWorker{
+				upgradeCmd:   "printf U >> " + logPath,
+				downgradeCmd: "printf D >> " + logPath,
+				depth:        tt.depth,
+			}
+
+			if err := worker.processStaircase(migrations); err != nil {
+				t.Fatalf("processStaircase() unexpected error: %v", err)
+			}
+			got, err := os.ReadFile(logPath)
+			if err != nil {
+				t.Fatalf("read command log: %v", err)
+			}
+			if string(got) != tt.want {
+				t.Fatalf("command order = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestProcessDownUpDownRequiresBaselineWhenComparing(t *testing.T) {
+	worker := &StaircaseWorker{
+		compareSchemaSnapshots: true,
+		baseline:               make(map[string]*driver.SchemaSnapshot),
+	}
+
+	err := worker.processDownUpDown([]string{"1.sql"})
+	if !errors.Is(err, ErrBaselineNotFound()) {
+		t.Fatalf("processDownUpDown() error = %v, want ErrBaselineNotFound", err)
+	}
+}
+
+func TestReapplyMigrationsRequiresBaselineWhenComparing(t *testing.T) {
+	worker := &StaircaseWorker{
+		compareSchemaSnapshots: true,
+		upgradeCmd:             "true",
+		baseline:               make(map[string]*driver.SchemaSnapshot),
+	}
+
+	err := worker.reapplyMigrations([]string{"1.sql"})
+	if !errors.Is(err, ErrBaselineNotFound()) {
+		t.Fatalf("reapplyMigrations() error = %v, want ErrBaselineNotFound", err)
 	}
 }
