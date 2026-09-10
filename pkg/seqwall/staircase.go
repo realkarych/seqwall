@@ -637,12 +637,18 @@ func (s *StaircaseWorker) scanTriggers(snapshot *driver.SchemaSnapshot) error {
 func (s *StaircaseWorker) scanFunctions(snapshot *driver.SchemaSnapshot) error {
 	routinesQuery := fmt.Sprintf(
 		`
-            SELECT routine_name, routine_type, data_type
-            FROM information_schema.routines
-            WHERE %s
-            ORDER BY routine_name;
+            SELECT p.proname,
+                   CASE WHEN p.prokind = 'p' THEN 'PROCEDURE' ELSE 'FUNCTION' END,
+                   COALESCE(pg_catalog.pg_get_function_result(p.oid), ''),
+                   pg_catalog.format('%%I.%%I(%%s)', n.nspname, p.proname,
+                                     pg_catalog.pg_get_function_identity_arguments(p.oid)),
+                   pg_catalog.pg_get_functiondef(p.oid)
+            FROM pg_catalog.pg_proc p
+            JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+            WHERE p.prokind IN ('f', 'p', 'w') AND %s
+            ORDER BY n.nspname, p.proname, pg_catalog.pg_get_function_identity_arguments(p.oid);
         `,
-		s.buildSchemaCond("specific_schema"),
+		s.buildSchemaCond("n.nspname"),
 	)
 	rows, err := s.dbClient.Execute(routinesQuery)
 	if err != nil {
@@ -653,27 +659,17 @@ func (s *StaircaseWorker) scanFunctions(snapshot *driver.SchemaSnapshot) error {
 		snapshot.Functions = make(map[string]driver.FunctionDefinition)
 	}
 	for rows.Rows.Next() {
-		var (
-			routineName     string
-			routineTypeNull sql.NullString
-			returnType      string
-		)
+		var routine driver.FunctionDefinition
 		if err := rows.Rows.Scan(
-			&routineName,
-			&routineTypeNull,
-			&returnType,
+			&routine.RoutineName,
+			&routine.RoutineType,
+			&routine.ReturnType,
+			&routine.RoutineIdentity,
+			&routine.Definition,
 		); err != nil {
 			return fmt.Errorf("scan function row: %w", err)
 		}
-		routineType := ""
-		if routineTypeNull.Valid {
-			routineType = routineTypeNull.String
-		}
-		snapshot.Functions[routineName] = driver.FunctionDefinition{
-			RoutineName: routineName,
-			RoutineType: routineType,
-			ReturnType:  returnType,
-		}
+		snapshot.Functions[routine.RoutineIdentity] = routine
 	}
 	if err := rows.Rows.Err(); err != nil {
 		return fmt.Errorf("iterate function rows: %w", err)
