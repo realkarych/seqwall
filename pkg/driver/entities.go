@@ -78,11 +78,11 @@ type ForeignKeyDefinition struct {
 }
 
 type TriggerDefinition struct {
-	TriggerName       string `db:"trigger_name"       json:"trigger_name"`
-	EventManipulation string `db:"event_manipulation" json:"event_manipulation"`
-	EventObjectTable  string `db:"event_object_table" json:"event_object_table"`
-	ActionTiming      string `db:"action_timing"      json:"action_timing"`
-	ActionStatement   string `db:"action_statement"   json:"action_statement"`
+	TriggerName string `db:"trigger_name" json:"trigger_name"`
+	TableSchema string `db:"table_schema" json:"table_schema"`
+	TableName   string `db:"table_name"   json:"table_name"`
+	Definition  string `db:"definition"   json:"definition"`
+	Enabled     string `db:"enabled"      json:"enabled"`
 }
 
 type FunctionDefinition struct {
