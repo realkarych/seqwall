@@ -301,7 +301,8 @@ func (s *StaircaseWorker) buildColumnsQuery() string {
             c.udt_name,
             t.typtype,
             t.typcategory,
-            CASE WHEN t.typtype = 'e' THEN 0 ELSE a.atttypid END AS type_oid,
+            CASE WHEN t.typtype = 'e' OR (t.typtype = 'd' AND t.typcategory = 'E')
+                THEN 0 ELSE a.atttypid END AS type_oid,
             c.datetime_precision,
             c.is_nullable,
             c.collation_name,
@@ -314,11 +315,16 @@ func (s *StaircaseWorker) buildColumnsQuery() string {
             c.numeric_precision,
             c.numeric_scale
         FROM information_schema.columns c
-        JOIN pg_catalog.pg_type t
-            ON c.udt_name = t.typname
+        JOIN pg_catalog.pg_namespace n
+            ON n.nspname = c.table_schema
+        JOIN pg_catalog.pg_class r
+            ON r.relnamespace = n.oid
+            AND r.relname = c.table_name
         JOIN pg_catalog.pg_attribute a
-            ON a.attrelid = (c.table_schema||'.'||c.table_name)::regclass
+            ON a.attrelid = r.oid
             AND a.attname = c.column_name
+        JOIN pg_catalog.pg_type t
+            ON t.oid = a.atttypid
         WHERE %s
         ORDER BY c.table_name, c.ordinal_position;
     `, s.buildSchemaCond("c.table_schema"))
@@ -385,7 +391,7 @@ func (s *StaircaseWorker) scanViews(snapshot *driver.SchemaSnapshot) error {
 		`
             SELECT
                 viewname AS table_name,
-                pg_get_viewdef(viewname::regclass, true) AS definition
+                definition
             FROM pg_views
             WHERE %s;
         `,
@@ -733,7 +739,7 @@ func (s *StaircaseWorker) scanMatViews(snapshot *driver.SchemaSnapshot) error {
 		`
             SELECT
                 matviewname AS table_name,
-                pg_get_viewdef(matviewname::regclass, true) AS definition,
+                definition,
                 ispopulated
             FROM pg_matviews
             WHERE %s;
