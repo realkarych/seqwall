@@ -36,6 +36,13 @@ func (s *StaircaseWorker) Run() error {
 }
 
 func (s *StaircaseWorker) processStaircase(migrations []string) error {
+	if s.compareSchemaSnapshots {
+		snapshot, err := s.makeSchemaSnapshot()
+		if err != nil {
+			return fmt.Errorf("initial snapshot: %w", err)
+		}
+		s.initialBaseline = snapshot
+	}
 	log.Println("✨ Step 1: DB actualisation — migrating all migrations up...")
 	if err := s.actualiseDb(migrations); err != nil {
 		return fmt.Errorf("actualise db: %w", err)
@@ -122,8 +129,18 @@ func (s *StaircaseWorker) processDownUpDown(migs []string) error {
 			if !ok {
 				return fmt.Errorf("%w: %s", ErrBaselineNotFound(), mig)
 			}
-			if idx := len(migs) - i - 1; idx >= 0 {
-				prev = s.baseline[migs[idx]]
+			idx := len(migs) - i
+			if idx == 0 {
+				prev = s.initialBaseline
+				if prev == nil {
+					return fmt.Errorf("%w: initial snapshot", ErrBaselineNotFound())
+				}
+			} else {
+				predecessor := migs[idx-1]
+				prev, ok = s.baseline[predecessor]
+				if !ok {
+					return fmt.Errorf("%w: %s", ErrBaselineNotFound(), predecessor)
+				}
 			}
 		}
 		if err := s.runDownUpDown(mig, i, cur, prev); err != nil {

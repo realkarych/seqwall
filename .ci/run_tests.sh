@@ -52,6 +52,10 @@ run_one() {
     --postgres-url "$DATABASE_URL"
 }
 
+initialize_runner() {
+  dbmate --schema-file /dev/null dump >/dev/null
+}
+
 total=0
 ok=0
 fail=0
@@ -62,6 +66,13 @@ for d in test_data/valid/*/; do
   total=$((total+1))
 
   init_db
+  if ! initialize_runner; then
+    echo "❌ $d (dbmate initialization failed)"
+    failed_list+=("$d")
+    fail=$((fail+1))
+    stop_db
+    continue
+  fi
   if run_one "$d"; then
     echo "✔  $d"
     ok=$((ok+1))
@@ -78,6 +89,13 @@ for d in test_data/wrong/*/; do
   total=$((total+1))
 
   init_db
+  if ! initialize_runner; then
+    echo "❌ $d (dbmate initialization failed)"
+    failed_list+=("$d")
+    fail=$((fail+1))
+    stop_db
+    continue
+  fi
   if run_one "$d"; then
     echo "❌ $d (should fail)"
     failed_list+=("$d")
