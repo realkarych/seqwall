@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"runtime"
 	"runtime/debug"
 	"strings"
@@ -195,17 +194,18 @@ func (s *StaircaseWorker) makeDownStep(migration string, step int) error {
 }
 
 func (s *StaircaseWorker) executeCommand(command, migration string) (string, error) {
-	command = strings.ReplaceAll(command, CurrentMigrationPlaceholder, migration)
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/C", command)
-	} else {
-		shell := os.Getenv("SHELL")
-		if shell == "" {
-			shell = "sh"
+	if strings.Contains(command, CurrentMigrationPlaceholder) {
+		if !supportsLegacyPlaceholder(migration) {
+			usage := `"$` + CurrentMigrationEnv + `"`
+			if runtime.GOOS == "windows" {
+				usage = "a helper that reads " + CurrentMigrationEnv
+			}
+			return "", fmt.Errorf("cannot substitute %s for this filename; use %s in the migration command", CurrentMigrationPlaceholder, usage)
 		}
-		cmd = exec.Command(shell, "-c", command)
+		command = strings.ReplaceAll(command, CurrentMigrationPlaceholder, migration)
 	}
+	cmd := newShellCommand(command)
+	cmd.Env = append(os.Environ(), CurrentMigrationEnv+"="+migration)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		log.Printf("Command %q failed: %v\nCallback:\n%s\nStacktrace:\n%s",

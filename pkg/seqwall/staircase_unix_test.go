@@ -6,7 +6,9 @@ package seqwall
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -197,5 +199,52 @@ func TestReapplyMigrationsRequiresBaselineWhenComparing(t *testing.T) {
 	err := worker.reapplyMigrations([]string{"1.sql"})
 	if !errors.Is(err, ErrBaselineNotFound()) {
 		t.Fatalf("reapplyMigrations() error = %v, want ErrBaselineNotFound", err)
+	}
+}
+
+func TestCommandUnixLiteralArguments(t *testing.T) {
+	command := commandHelper(t)
+	for _, shell := range []string{"", "sh", "bash", "zsh"} {
+		t.Run("shell="+shell, func(t *testing.T) {
+			if shell != "" {
+				if _, err := exec.LookPath(shell); err != nil {
+					t.Skipf("shell unavailable: %v", err)
+				}
+			}
+			t.Setenv("SHELL", shell)
+			for _, migration := range unusualMigrations {
+				for _, count := range []int{1, 2} {
+					result := runCommandResult(t, command+" read"+strings.Repeat(` "$SEQWALL_CURRENT_MIGRATION"`, count), migration)
+					want := make([]string, count)
+					for i := range want {
+						want[i] = migration
+					}
+					if !reflect.DeepEqual(result.Args, want) {
+						t.Fatalf("argv = %q, want %q", result.Args, want)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestCommandUnixFilenameDoesNotExecute(t *testing.T) {
+	command := commandHelper(t)
+	marker := filepath.Join(t.TempDir(), "marker")
+	for _, migration := range []string{"$(touch " + quoteCommandPath(marker) + ").sql", "`touch " + quoteCommandPath(marker) + "`.sql"} {
+		result := runCommandResult(t, command+` read "$SEQWALL_CURRENT_MIGRATION"`, migration)
+		if !reflect.DeepEqual(result.Args, []string{migration}) {
+			t.Fatalf("argv = %q, want literal %q", result.Args, migration)
+		}
+		if _, err := os.Stat(marker); !os.IsNotExist(err) {
+			t.Fatalf("filename executed: marker stat error %v", err)
+		}
+	}
+}
+
+func TestCommandUnixLegacySingleQuotes(t *testing.T) {
+	result := runCommandResult(t, commandHelper(t)+" read '{current_migration}'", "migrations/001.sql")
+	if !reflect.DeepEqual(result.Args, []string{"migrations/001.sql"}) {
+		t.Fatalf("argv = %q", result.Args)
 	}
 }
