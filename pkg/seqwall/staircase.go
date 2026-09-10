@@ -688,17 +688,19 @@ func (s *StaircaseWorker) scanTriggers(snapshot *driver.SchemaSnapshot) error {
 	triggersQuery := fmt.Sprintf(
 		`
             SELECT
-                pg_catalog.format('%%I.%%I.%%I', event_object_schema, event_object_table, trigger_name),
-                trigger_name,
-                event_manipulation,
-                event_object_table,
-                action_timing,
-                action_statement
-            FROM information_schema.triggers
-            WHERE %s
-            ORDER BY event_object_schema, event_object_table, trigger_name, event_manipulation;
+                pg_catalog.format('%%I.%%I.%%I', n.nspname, r.relname, t.tgname),
+                t.tgname,
+                n.nspname,
+                r.relname,
+                pg_catalog.pg_get_triggerdef(t.oid, false),
+                t.tgenabled::text
+            FROM pg_catalog.pg_trigger t
+            JOIN pg_catalog.pg_class r ON r.oid = t.tgrelid
+            JOIN pg_catalog.pg_namespace n ON n.oid = r.relnamespace
+            WHERE NOT t.tgisinternal AND %s
+            ORDER BY n.nspname, r.relname, t.tgname;
         `,
-		s.buildSchemaCond("trigger_schema"),
+		s.buildSchemaCond("n.nspname"),
 	)
 	rows, err := s.dbClient.Execute(triggersQuery)
 	if err != nil {
@@ -710,26 +712,26 @@ func (s *StaircaseWorker) scanTriggers(snapshot *driver.SchemaSnapshot) error {
 	}
 	for rows.Rows.Next() {
 		var (
-			triggerKey, triggerName, eventManipulation string
-			eventObjectTable                           string
-			actionTiming, actionStatement              string
+			triggerKey, triggerName string
+			tableSchema, tableName  string
+			definition, enabled     string
 		)
 		if err := rows.Rows.Scan(
 			&triggerKey,
 			&triggerName,
-			&eventManipulation,
-			&eventObjectTable,
-			&actionTiming,
-			&actionStatement,
+			&tableSchema,
+			&tableName,
+			&definition,
+			&enabled,
 		); err != nil {
 			return fmt.Errorf("scan trigger row: %w", err)
 		}
 		snapshot.Triggers[triggerKey] = driver.TriggerDefinition{
-			TriggerName:       triggerName,
-			EventManipulation: eventManipulation,
-			EventObjectTable:  eventObjectTable,
-			ActionTiming:      actionTiming,
-			ActionStatement:   actionStatement,
+			TriggerName: triggerName,
+			TableSchema: tableSchema,
+			TableName:   tableName,
+			Definition:  definition,
+			Enabled:     enabled,
 		}
 	}
 	if err := rows.Rows.Err(); err != nil {
