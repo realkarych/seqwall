@@ -112,6 +112,8 @@ This includes *tables*, *columns*, *constraints*, *indexes*, *views*,
 *triggers*, *functions*, *enums*, *sequences*, and *foreign keys*.
 Constraint snapshots retain complete definitions and enforcement state. Foreign key snapshots retain ordered
 local and referenced columns with qualified table identities.
+Trigger snapshots retain complete definitions and enabled state for user-defined triggers, including constraint
+triggers. PostgreSQL-generated internal triggers are excluded, so custom changes to their firing mode are not compared.
 The snapshots are then compared using structured diffs. This comparison covers the captured metadata
 in the selected schemas; it does not establish universal database equivalence.
 
