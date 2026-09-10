@@ -294,7 +294,8 @@ func (s *StaircaseWorker) buildColumnsQuery() string {
             c.udt_name,
             t.typtype,
             t.typcategory,
-            CASE WHEN t.typtype = 'e' THEN 0 ELSE a.atttypid END AS type_oid,
+            CASE WHEN t.typtype = 'e' OR (t.typtype = 'd' AND t.typcategory = 'E')
+                THEN 0 ELSE a.atttypid END AS type_oid,
             c.datetime_precision,
             c.is_nullable,
             c.collation_name,

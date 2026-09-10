@@ -44,6 +44,58 @@ func TestPostgresSnapshotDoesNotDuplicateColumnsForSameNamedTypes(t *testing.T) 
 	}
 }
 
+func TestPostgresSnapshotEnumDomainRecreation(t *testing.T) {
+	for _, nested := range []bool{false, true} {
+		name := "direct"
+		if nested {
+			name = "nested"
+		}
+		t.Run(name, func(t *testing.T) {
+			s := newPostgresIntegrationWorker(t, 1)
+			schema := pq.QuoteIdentifier(s.schemas[0])
+			postgresExec(t, s, "CREATE TYPE "+schema+".status AS ENUM ('pending', 'done')")
+			postgresExec(t, s, "CREATE DOMAIN "+schema+".amount_domain AS integer")
+			create := func() {
+				postgresExec(t, s, "CREATE DOMAIN "+schema+".status_domain AS "+schema+".status")
+				columnType := schema + ".status_domain"
+				if nested {
+					postgresExec(t, s, "CREATE DOMAIN "+schema+".nested_status_domain AS "+columnType)
+					columnType = schema + ".nested_status_domain"
+				}
+				postgresExec(t, s, "CREATE TABLE "+schema+".items (state "+columnType+", amount "+schema+".amount_domain)")
+			}
+			create()
+			before := postgresSnapshot(t, s)
+			postgresExec(t, s, "DROP TABLE "+schema+".items")
+			if nested {
+				postgresExec(t, s, "DROP DOMAIN "+schema+".nested_status_domain")
+			}
+			postgresExec(t, s, "DROP DOMAIN "+schema+".status_domain")
+			create()
+			after := postgresSnapshot(t, s)
+			if err := compareSchemas(before, after); err != nil {
+				t.Fatalf("identical enum-domain recreation changed snapshot: %v", err)
+			}
+			columns := after.Tables["items"].Columns
+			if len(columns) != 2 {
+				t.Fatalf("items has %d columns, want 2: %+v", len(columns), columns)
+			}
+			state := columns[0]
+			if state.TypeMeta.Typtype != "d" || state.TypeMeta.Typcategory != "E" || state.TypeMeta.TypeOID != 0 {
+				t.Fatalf("enum-domain metadata = %+v, want domain/enum category with stable OID", state.TypeMeta)
+			}
+			amount := columns[1]
+			if amount.TypeMeta.Typtype != "d" || amount.TypeMeta.Typcategory != "N" || amount.TypeMeta.TypeOID == 0 {
+				t.Fatalf("integer-domain metadata = %+v, want domain/numeric category with catalog OID", amount.TypeMeta)
+			}
+			postgresExec(t, s, "ALTER TABLE "+schema+".items ALTER COLUMN state TYPE "+schema+".status USING state::"+schema+".status")
+			if err := compareSchemas(after, postgresSnapshot(t, s)); err == nil {
+				t.Fatal("changing an enum-domain column to its base enum did not change the snapshot")
+			}
+		})
+	}
+}
+
 func TestPostgresSnapshotViewOutsideSearchPath(t *testing.T) {
 	s := newPostgresIntegrationWorker(t, 1)
 	schema := pq.QuoteIdentifier(s.schemas[0])
