@@ -15,10 +15,37 @@ permissions:
   packages: write
 
 jobs:
-  build-and-publish:
+  resolve-release:
     runs-on: ubuntu-latest
     outputs:
-      tag: ${{ steps.tag.outputs.TAG }}
+      tag: ${{ steps.release.outputs.TAG }}
+      sha: ${{ steps.release.outputs.SHA }}
+
+    steps:
+      - name: Checkout release refs
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: release
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          git check-ref-format "refs/tags/$TAG"
+          SHA=$(git rev-parse --verify "refs/tags/${TAG}^{commit}")
+          printf 'TAG=%s\nSHA=%s\n' "$TAG" "$SHA" >>"$GITHUB_OUTPUT"
+
+  build-and-publish:
+    needs: resolve-release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ needs.resolve-release.outputs.tag }}
     strategy:
       matrix:
         goos: [linux, darwin, windows]
@@ -27,27 +54,20 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.resolve-release.outputs.sha }}
 
       - name: Set up Go
         uses: actions/setup-go@v6.4.0
         with:
           go-version: '1.24'
 
-      - name: Extract tag
-        id: tag
-        run: |
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
-            echo "TAG=${{ github.event.inputs.tag }}" >>"$GITHUB_OUTPUT"
-          else
-            echo "TAG=${GITHUB_REF#refs/tags/}" >>"$GITHUB_OUTPUT"
-          fi
-
       - name: Build binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
-          VERSION: ${{ steps.tag.outputs.TAG }}
+          VERSION: ${{ needs.resolve-release.outputs.tag }}
         run: |
           mkdir -p dist
           BIN="seqwall"
@@ -59,7 +79,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          TAG: ${{ steps.tag.outputs.TAG }}
+          TAG: ${{ needs.resolve-release.outputs.tag }}
         run: |
           cd dist
           ARCHIVE_PREFIX="${TAG}_seqwall_${GOOS}_${GOARCH}"
@@ -72,8 +92,8 @@ jobs:
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v3.0.0
         with:
-          tag_name: ${{ steps.tag.outputs.TAG }}
-          name: ${{ steps.tag.outputs.TAG }}
+          tag_name: ${{ needs.resolve-release.outputs.tag }}
+          name: ${{ needs.resolve-release.outputs.tag }}
           files: |
             dist/*.tar.gz
             dist/*.zip
@@ -244,12 +264,14 @@ jobs:
           git push origin HEAD:gh-pages
 
   docker-image:
-    needs: build-and-publish
+    needs: [resolve-release, build-and-publish]
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          ref: ${{ needs.resolve-release.outputs.sha }}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4.0.0
@@ -282,7 +304,9 @@ jobs:
             ghcr.io/realkarych/seqwall:latest
 
       - name: Smoke-test image
+        env:
+          TAG: ${{ needs.build-and-publish.outputs.tag }}
         run: |
           docker run --rm \
-            ghcr.io/realkarych/seqwall:${{ needs.build-and-publish.outputs.tag }} \
+            "ghcr.io/realkarych/seqwall:${TAG}" \
             --version
