@@ -103,28 +103,43 @@ Each migration must be reversible and must not break the schema if applied, reve
 
 ### Snapshots reveal the truth
 
-After each migration, Seqwall captures schema metadata using **`information_schema` views**
-and **PostgreSQL system catalogs**.
+After each migration, Seqwall captures schema metadata using both SQL-standard **`information_schema` views** and
+**PostgreSQL-specific system catalogs and views**. The snapshots are compared using structured diffs.
 
-This includes *tables*, *columns*, *constraints*, *indexes*, *views*,
-*triggers*, *functions*, *enums*, *sequences*, and *foreign keys*.
-Constraint snapshots retain complete definitions and enforcement state. Foreign key snapshots retain ordered
-local and referenced columns with qualified table identities.
-Column snapshots record effective nullability on every supported PostgreSQL version. On PostgreSQL 18, constraint
-snapshots also retain native `NOT NULL` names, definitions, validation state, enforcement, and inheritance behavior.
-Trigger snapshots retain complete definitions and enabled state for user-defined triggers, including constraint
-triggers. PostgreSQL-generated internal triggers are excluded, so custom changes to their firing mode are not compared.
-Sequence snapshots retain their numeric type, start, minimum, maximum, increment, cycle and cache configuration,
-plus qualified column ownership for explicit, serial and identity sequences. Runtime counters such as the current or
-last value and `is_called` are data state and are excluded.
-Column references to domain, composite, and range types retain their qualified type identity, and enum labels are
-captured. Snapshot coverage is deliberately bounded: table persistence, row-level security policies, partition and
-inheritance metadata, relation options and ownership, complete domain/composite/range definitions, extension object
-definitions, non-table ACLs, and role-dependent table-grant visibility are not comprehensively captured.
-The snapshots are compared using structured diffs. This comparison covers the captured metadata in the selected
-schemas; it does not establish universal database equivalence or a transactionally consistent view during concurrent DDL.
+The project-required and tested compatibility range is PostgreSQL 13–18. PostgreSQL 13 remains Seqwall's compatibility
+floor even though it is outside upstream security maintenance; [upstream maintenance](https://www.postgresql.org/support/versioning/)
+and Seqwall's tested range are separate policies. Changing either end of the range requires a ticket, compatibility
+evidence, matching PostgreSQL integration and staircase matrices, and updated documentation.
 
-### `Staircase` testing guarantees *schema* consistency
+Seqwall compares snapshots within one PostgreSQL major with unchanged connection and session settings. It does not
+promise equality between snapshots serialized by different PostgreSQL majors. The `public` schema is selected by
+default; repeat `--schema` to include more schemas. Only the properties captured below are compared.
+
+| Object | Compared identity and properties |
+| --- | --- |
+| Tables/columns | Qualified table identity; ordered columns; column name, SQL/logical qualified type identity, type modifier/category, nullability, default, qualified collation, identity/generated state/expression, datetime precision, character length, numeric precision/scale |
+| Views | Qualified identity and PostgreSQL view definition |
+| Materialized views | Qualified identity, definition, and populated state |
+| Indexes | Qualified identity and PostgreSQL index definition |
+| Constraints | Qualified schema/table/name, full catalog-deparsed definition, type, deferrability, initial deferral, validation, inheritance, and enforcement where supported; CHECK/FK/PK/UNIQUE/exclusion plus native PostgreSQL 18 `NOT NULL` |
+| Foreign keys | Qualified local/target relations, ordered local/target column lists, full definition, update/delete behavior; shared constraint state is represented by the constraint entry |
+| Enums | Qualified identity and ordered labels |
+| Triggers | Qualified owning table/name, full PostgreSQL definition, and enabled mode; user triggers including user constraint triggers, excluding internally generated triggers |
+| Functions/procedures | Schema-qualified identity with argument types, routine kind, return type, and full definition; aggregates excluded |
+| Sequences | Qualified identity, logical type, start/min/max/increment/cache/cycle, and nullable qualified column ownership/dependency kind; runtime counters excluded |
+| Table privileges | Qualified table identity, grantee, privilege, and grantability visible through `role_table_grants` |
+
+PostgreSQL 18's native `NOT NULL` metadata is captured as a real constraint, without regex or name rewriting. See the
+[PostgreSQL 18 release notes](https://www.postgresql.org/docs/18/release-18.html) and
+[`pg_constraint` catalog](https://www.postgresql.org/docs/18/catalog-pg-constraint.html).
+
+Snapshot comparison does not establish universal database equivalence. Table persistence, row-level security,
+partitioning, inheritance, relation options, and ownership are not comprehensively captured. Standalone domain,
+composite, and range definitions and extension object definitions are not comprehensive. Non-table ACLs are not
+comprehensive, and table grants are limited to privileges visible to the current role through `role_table_grants`.
+Seqwall does not promise a consistent snapshot during concurrent DDL.
+
+### `Staircase` tests captured schema consistency
 
 We use a 3-phase strategy:
 
@@ -141,7 +156,7 @@ We use a 3-phase strategy:
    - re-apply each migration one by one
    - compare each re-applied migration with etalon
 
-This ensures that the migration chain is robust in both directions, even when recovering from mid-chain downgrades.
+This checks the captured schema metadata in both directions, including recovery from mid-chain downgrades.
 
 <p align="center" width="100%">
     <img width="75%" alt="staircase" src="https://github.com/user-attachments/assets/b3fad935-a08b-483c-ada1-68586288f6b7">
@@ -162,7 +177,12 @@ You bring your own migration runner (`dbmate`, `alembic`, `goose`, `sqlx`, `atla
 Seqwall just executes shell commands.
 
 Seqwall captures the database state before the first migration and expects the first rollback to restore that state.
-Initialize any tables or other objects that your migration runner needs before starting Seqwall.
+The database schema and migration-runner history must both begin in the state immediately before the first listed
+migration. Initialize the runner's metadata before starting Seqwall, without applying any listed migration. Any tables
+or other objects created during that initialization become part of Seqwall's initial snapshot.
+
+Seqwall selects non-directory files by `--migrations-extension` and sorts their paths lexicographically. Every upgrade
+or downgrade command must advance exactly one migration. Callbacks inherit Seqwall's environment and working directory.
 
 For dbmate 2.27.0, the following command creates its `schema_migrations` table without applying a migration:
 
@@ -176,9 +196,9 @@ remains in the database and becomes part of Seqwall's initial snapshot.
 
 ### Passing the current migration to your runner
 
-Every upgrade and downgrade command receives `SEQWALL_CURRENT_MIGRATION` in its environment,
-even when the command contains no placeholder. Its value is the exact path discovered by Seqwall,
-without quoting or normalization. Each command must apply or revert **exactly one migration**.
+Every upgrade and downgrade command receives the filename-safe current path through `SEQWALL_CURRENT_MIGRATION`,
+even when the command contains no placeholder. Its value is the exact path discovered by Seqwall, without quoting or
+normalization. Each command must apply or revert **exactly one migration**.
 An unrestricted `up` that applies all pending migrations violates the staircase algorithm.
 
 For a POSIX-compatible shell, pass the value as a double-quoted argument:
@@ -230,7 +250,7 @@ No — databases involve a spectrum of concerns, and a complete testing strategy
 - Integration tests — to validate application logic against migrated schemas
 - ...
 
-Seqwall focuses on **schema-level structural correctness** — nothing more, nothing less.
+Seqwall focuses on reversibility and consistency of the captured schema metadata.
 
 ## <p align="center">🙏 Contribution</p>
 
