@@ -19,6 +19,12 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Verify Go modules
+        run: go mod verify
+
+      - name: Check Go module tidiness
+        run: go mod tidy -diff
+
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9.2.1
         with:
