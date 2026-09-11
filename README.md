@@ -34,9 +34,8 @@ docker run --rm --network=host \
 ### Homebrew (macOS & Linux)
 
 ```bash
-brew tap realkarych/tap
-brew install seqwall        # first install
-brew upgrade seqwall        # later updates
+brew install realkarych/tap/seqwall
+brew upgrade realkarych/tap/seqwall
 ```
 
 ### Debian / Ubuntu (APT)
