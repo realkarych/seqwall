@@ -3,7 +3,7 @@ module github.com/realkarych/seqwall
 go 1.24.0
 
 require (
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.12.3
 	github.com/pmezard/go-difflib v1.0.0
 	github.com/spf13/cobra v1.9.1
 )
