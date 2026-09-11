@@ -127,3 +127,14 @@ jobs:
       - name: Build image and run staircase tests
         shell: bash
         run: make PG_VERS="${{ matrix.pg }}" test
+
+  staircase-arm64:
+    name: Staircase tests (ARM64, PostgreSQL 17)
+    runs-on: ubuntu-24.04-arm
+    needs: lint-go
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.2
+      - name: Build image and run staircase tests
+        shell: bash
+        run: make PG_VERS="17" test
