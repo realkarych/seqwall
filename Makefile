@@ -37,7 +37,7 @@ docker-test: docker-build
 	@set -e; \
 	for v in $(PG_VERS); do \
 		echo "👉 testing on PostgreSQL $$v ..."; \
-		docker run --rm -v $$PWD:/work -e PG_VERSION=$$v -e PGPORT=$(PGPORT) $(TEST_IMAGE); \
+		docker run --rm -v "$$PWD:/work" -e PG_VERSION=$$v -e PGPORT=$(PGPORT) $(TEST_IMAGE); \
 	done
 
 ## Entry‑point for staircase tests

@@ -10,7 +10,8 @@ RUN --mount=type=cache,target=/go/pkg --mount=type=cache,target=/root/.cache/go-
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg go mod download
 
-COPY . .
+COPY main.go ./
+COPY pkg/ ./pkg/
 
 RUN --mount=type=cache,target=/go/pkg \
     --mount=type=cache,target=/root/.cache/go-build \
