@@ -64,7 +64,7 @@ add the binary to your `PATH`.
 
 > On Windows, you may need `Unblock-File .\seqwall.exe` before first run.
 
-### Go install (Go ≥ 1.17)
+### Go install (Go ≥ 1.24)
 
 ```bash
 go install github.com/realkarych/seqwall@latest
@@ -83,16 +83,15 @@ Usage:
   seqwall staircase [flags]
 
 Flags:
-      --postgres-url string           PostgreSQL URL (required or fallback: $DATABASE_URL environment variable)
-      --migrations-path string        Path to migrations. Migrations must be in lexicographical order (required)
-      --upgrade string                Shell command that applies next migration (required)
-      --downgrade string              Shell command that reverts current migration (required)
-      --migrations-extension string   Extension of migration files (default: .sql)
-      --schema stringArray            Schemas to test (default [public])
-      --test-snapshots                Compare schema snapshots. If false, only checks fact that migrations are applied
-                                      / reverted with no errors (default true)
-      --depth int                     Depth of staircase testing (0 = all)
-      --help                          help for staircase
+      --postgres-url string           PostgreSQL connection URL (defaults to DATABASE_URL)
+      --migrations-path string        Directory containing lexicographically ordered migration files
+      --upgrade string                Command that applies exactly one migration
+      --downgrade string              Command that reverts exactly one migration
+      --test-snapshots                Compare schema snapshots (default true)
+      --schema stringArray            Schema to include in testing (repeatable) (default [public])
+      --depth int                     Number of migrations to test (0 means all)
+      --migrations-extension string   Migration filename extension (default ".sql")
+  -h, --help                          help for staircase
 ```
 
 <hr>
