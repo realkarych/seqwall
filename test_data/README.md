@@ -3,7 +3,8 @@
 ## Testcase types
 
 - `valid/` folder contains subfolders. Each subfolder is a scenario to test. Each scenario is correct (no errors).
-- `wrong/` folder contains subfolders. Each subfolder is a scenario to test. Each scenario must fail for its declared schema defect.
+- `wrong/` folder contains subfolders. Each subfolder is a scenario to test.
+  Each scenario must fail for its declared schema defect.
 
 ## Naming conventions
 
