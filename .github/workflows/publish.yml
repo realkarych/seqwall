@@ -128,19 +128,27 @@ jobs:
           path: tap
           ref: ${{ steps.tapinfo.outputs.BRANCH }}
 
-      - name: Download macOS archives
+      - name: Download Homebrew archives
         run: |
           mkdir -p dl
           gh release download "$TAG" -R realkarych/seqwall -D dl -p "${TAG}_seqwall_darwin_amd64.tar.gz"
           gh release download "$TAG" -R realkarych/seqwall -D dl -p "${TAG}_seqwall_darwin_arm64.tar.gz"
+          gh release download "$TAG" -R realkarych/seqwall -D dl -p "${TAG}_seqwall_linux_amd64.tar.gz"
+          gh release download "$TAG" -R realkarych/seqwall -D dl -p "${TAG}_seqwall_linux_arm64.tar.gz"
 
       - name: Calculate SHA256
         id: shas
         run: |
-          AMD=$(sha256sum dl/*darwin_amd64.tar.gz | cut -d' ' -f1)
-          ARM=$(sha256sum dl/*darwin_arm64.tar.gz | cut -d' ' -f1)
-          echo "AMD=$AMD" >>"$GITHUB_OUTPUT"
-          echo "ARM=$ARM" >>"$GITHUB_OUTPUT"
+          DARWIN_AMD64=$(sha256sum dl/*darwin_amd64.tar.gz | cut -d' ' -f1)
+          DARWIN_ARM64=$(sha256sum dl/*darwin_arm64.tar.gz | cut -d' ' -f1)
+          LINUX_AMD64=$(sha256sum dl/*linux_amd64.tar.gz | cut -d' ' -f1)
+          LINUX_ARM64=$(sha256sum dl/*linux_arm64.tar.gz | cut -d' ' -f1)
+          {
+            echo "DARWIN_AMD64=$DARWIN_AMD64"
+            echo "DARWIN_ARM64=$DARWIN_ARM64"
+            echo "LINUX_AMD64=$LINUX_AMD64"
+            echo "LINUX_ARM64=$LINUX_ARM64"
+          } >>"$GITHUB_OUTPUT"
 
       - name: Update formula
         run: |
@@ -149,15 +157,24 @@ jobs:
           class Seqwall < Formula
             desc "Testing tool for PostgreSQL migrations"
             homepage "https://github.com/realkarych/seqwall"
-            version "${TAG}"
 
             on_macos do
               if Hardware::CPU.arm?
                 url "https://github.com/realkarych/seqwall/releases/download/${TAG}/${TAG}_seqwall_darwin_arm64.tar.gz"
-                sha256 "${{ steps.shas.outputs.ARM }}"
+                sha256 "${{ steps.shas.outputs.DARWIN_ARM64 }}"
               else
                 url "https://github.com/realkarych/seqwall/releases/download/${TAG}/${TAG}_seqwall_darwin_amd64.tar.gz"
-                sha256 "${{ steps.shas.outputs.AMD }}"
+                sha256 "${{ steps.shas.outputs.DARWIN_AMD64 }}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/realkarych/seqwall/releases/download/${TAG}/${TAG}_seqwall_linux_arm64.tar.gz"
+                sha256 "${{ steps.shas.outputs.LINUX_ARM64 }}"
+              else
+                url "https://github.com/realkarych/seqwall/releases/download/${TAG}/${TAG}_seqwall_linux_amd64.tar.gz"
+                sha256 "${{ steps.shas.outputs.LINUX_AMD64 }}"
               end
             end
 
@@ -166,7 +183,7 @@ jobs:
             end
 
             test do
-              system "#{bin}/seqwall", "--version"
+              system bin/"seqwall", "--version"
             end
           end
           EOF
